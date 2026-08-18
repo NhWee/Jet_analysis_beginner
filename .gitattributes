@@ -1,0 +1,14 @@
+# 줄바꿈을 저장소 전체에서 LF 로 통일한다.
+#
+# 이게 없으면 Windows 의 core.autocrlf 가 체크아웃 시 CRLF 로 바꿔버려서,
+# 내용이 전혀 바뀌지 않았는데도 모든 파일이 "modified" 로 뜬다.
+# (실제로 겪었다 — rebase 중에 15개 파일이 통째로 변경된 것처럼 보였다.)
+* text=auto eol=lf
+
+# 바이너리는 손대지 않는다
+*.png  binary
+*.pdf  binary
+*.root binary
+*.parquet binary
+*.pt   binary
+*.h5   binary
