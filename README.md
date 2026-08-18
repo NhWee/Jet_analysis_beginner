@@ -5,6 +5,9 @@ collider data. Concretely: **jet reconstruction** + **Energy-Energy Correlators 
 Open Data, with a deep-learning component. Research notes (incl. failure reports) live in Notion;
 setup and code are documented here for GitHub.
 
+> 📌 **처음 오셨다면 [`docs/WORKFLOW.md`](docs/WORKFLOW.md) 부터 읽어주세요.**
+> 저장소 구조, 재현 방법, 커밋·기록 규칙, 지금까지의 판단 근거, 알려진 함정이 정리돼 있습니다.
+
 ---
 
 ## 1. Architecture — two layers
