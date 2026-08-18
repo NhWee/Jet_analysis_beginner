@@ -1,0 +1,60 @@
+# ---- Data (never commit collider data; record the Open Data DOI instead) ----
+# NOTE: the "!data/**/" line is required. Git will not look inside an excluded
+# directory, so without it the .gitkeep/README.md negations below never match.
+data/**
+!data/**/
+!data/**/.gitkeep
+!data/**/README.md
+*.root
+*.parquet
+*.h5
+*.hdf5
+*.npz
+*.lhe
+*.hepmc
+
+# ---- Models / checkpoints ----
+models/**
+!models/.gitkeep
+*.pt
+*.pth
+*.ckpt
+*.onnx
+
+# ---- Results (keep the dirs, ignore heavy outputs) ----
+results/**
+!results/**/
+!results/**/.gitkeep
+!results/**/*.md
+
+# ---- Notebooks: commit source, not outputs ----
+.ipynb_checkpoints/
+# tip: `pip install nbstripout && nbstripout --install` to strip outputs automatically
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+
+# ---- Environments ----
+.venv/
+venv/
+env/
+envs/
+.conda/
+
+# ---- Editors / OS ----
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# ---- Logs ----
+*.log
+logs/
+wandb/
+runs/
