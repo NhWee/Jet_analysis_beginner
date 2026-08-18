@@ -1,0 +1,55 @@
+# environment.yml — Jet analysis (jet reconstruction + Energy-Energy Correlators)
+#
+#   Create : mamba env create -f environment.yml      (or: conda env create -f environment.yml)
+#   Use    : conda activate jet-eec
+#   Freeze : conda env export --no-builds > environment.lock.yml   # commit this for reproducibility
+#
+# One unified environment works for ALL four LHC experiments (CMS/ATLAS/ALICE/LHCb).
+# The per-experiment difference is only the data-access/format layer, not this env.
+
+name: jet-eec
+
+channels:
+  - conda-forge
+
+dependencies:
+  # --- Python + core scientific stack ---
+  - python=3.11
+  - numpy
+  - scipy
+  - pandas
+  - matplotlib
+  - numba                 # JIT-accelerate the O(N^2) EEC constituent-pair loop
+
+  # --- Scikit-HEP: read data, build jets, histogram, plot ---
+  - uproot                # read ROOT / NanoAOD files (no ROOT install needed)
+  - awkward               # jagged / variable-length arrays (jet constituents)
+  - vector                # Lorentz 4-vectors (pt, eta, phi, E)
+  - hist                  # histograms
+  - boost-histogram
+  - mplhep                # ATLAS/CMS-style plot styling
+  - particle              # PDG particle properties
+  - hepunits
+  - coffea                # columnar analysis framework (scales to many files)
+  - xrootd                # stream open-data files over root:// without full download
+
+  # --- Deep learning ---
+  - pytorch               # CPU build; for GPU see README (pytorch-cuda)
+  - scikit-learn
+
+  # --- Event generator: develop/validate the EEC pipeline on truth particles ---
+  - pythia8
+
+  # --- Notebook / tooling ---
+  - jupyterlab
+  - ipykernel
+  - git
+
+  # --- Optional (uncomment if you want ROOT-native workflows) ---
+  # - root                # PyROOT / RDataFrame; installs cleanly from conda-forge
+
+  # --- pip-only extras ---
+  - pip
+  - pip:
+      - fastjet           # scikit-hep FastJet: clustering + energy correlators (awkward interface)
+      - energyflow        # EFPs, EFN/PFN, EMD, jet datasets — jets + ML + correlators
