@@ -16,8 +16,13 @@ Conventions made explicit (these are the usual source of disagreement between pa
   exclude them explicitly.
 * **Angle** — ``dR_ij = sqrt(dEta^2 + dPhi^2)`` with dPhi wrapped to (-pi, pi].
 
-Reference: Energy correlation functions for jet substructure,
-Larkoski, Moult, Neill, JHEP 06 (2013) 108, arXiv:1305.0007.
+References:
+  Komiske, Moult, Thaler, Zhu, "Analyzing N-point energy correlators inside
+  jets with CMS Open Data", Phys. Rev. Lett. 130 (2023) 051901,
+  arXiv:2201.07800 -- the two-point EEC in jets, as computed here.
+  Larkoski, Salam, Thaler, "Energy correlation functions for jet
+  substructure", JHEP 06 (2013) 108, arXiv:1305.0007 -- the related e2/C2
+  discriminants, not the R_L distribution.
 """
 
 from __future__ import annotations

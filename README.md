@@ -171,7 +171,7 @@ and they are computed alongside the EEC as cross-checks:
 | Observable | Definition | Reads |
 |---|---|---|
 | $D(z)$ | $z = p_{T,\mathrm{const}}/p_{T,\mathrm{jet}}$ | fragmentation: jets are mostly soft particles |
-| multiplicity | $n_{\mathrm{const}}$ | grows logarithmically with jet $p_T$ (soft-gluon emission) |
+| multiplicity | $n_{\mathrm{const}}$ | grows with jet $p_T$ (soft-gluon cascade) |
 | girth | $\sum_i z_i \Delta R_i$ | jet width; larger for gluon jets |
 | $p_TD$ | $\sqrt{\sum_i p_{T,i}^2}\,/\sum_i p_{T,i}$ | momentum sharing; smaller for gluon jets |
 
@@ -179,8 +179,14 @@ Convention note: papers differ on EEC normalisation and pair counting. The choic
 made here are stated explicitly at the top of `src/jeteec/eec.py` -- worth reading
 before comparing any number against the literature.
 
-Reference: Larkoski, Moult, Neill, *Energy correlation functions for jet
-substructure*, JHEP 06 (2013) 108, [arXiv:1305.0007](https://arxiv.org/abs/1305.0007).
+References: for energy correlators measured inside jets on CMS Open Data --
+the closest published analogue of this project -- Komiske, Moult, Thaler, Zhu,
+*Analyzing N-point energy correlators inside jets with CMS Open Data*,
+Phys. Rev. Lett. 130 (2023) 051901,
+[arXiv:2201.07800](https://arxiv.org/abs/2201.07800). The related but distinct
+*energy correlation functions* (the $e_2$, $C_2$ jet-shape discriminants) are
+Larkoski, Salam, Thaler, JHEP 06 (2013) 108,
+[arXiv:1305.0007](https://arxiv.org/abs/1305.0007).
 
 </details>
 
