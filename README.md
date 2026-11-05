@@ -17,12 +17,13 @@ validates each step on synthetic events first.
        alt="Fragmentation function, constituent multiplicity, girth/pTD, and the EEC, computed from toy events">
 </p>
 
-> **Status: the pipeline is built and validated on synthetic events; no open data
-> has been analysed yet.** Every number below comes from `src/toy_generator.py`,
-> which has no matrix element, no parton shower and no hadronisation. It is a
-> pipeline test, not a measurement. What it *does* establish is that the
-> clustering, the correlator and its normalisation are correct before any real
-> data is touched.
+> **Status: the pipeline is validated on synthetic events and on Pythia 8 truth;
+> no open data has been analysed yet.** The tier numbers below come from
+> `src/toy_generator.py`, which has no matrix element, no parton shower and no
+> hadronisation. The Pythia run ([`docs/pythia_validation_results.md`](docs/pythia_validation_results.md))
+> passes the normalisation check and shows the expected physics: the small-angle
+> EEC scales with $1/p_T$ and disappears when hadronisation is switched off.
+> Neither is a measurement.
 
 ---
 
@@ -54,8 +55,12 @@ bit for bit. If a number moves, something broke.
 mamba env create -f environment.yml
 conda activate jet-eec
 
+# 0. unit tests (seconds)
+python -m pytest -q tests
+
 # 1. is the pipeline correct?  -- run this FIRST, before any open data
 python src/validate_eec_pythia.py --n-events 2000 --seed 12345
+#    add --compare-hadronisation for the parton- vs hadron-level comparison
 
 # 2. which data tier do I actually need?
 python src/tier_demo.py --n-events 400 --seed 12345
@@ -179,7 +184,10 @@ and they are computed alongside the EEC as cross-checks:
 
 Convention note: papers differ on EEC normalisation and pair counting. The choices
 made here are stated explicitly at the top of `src/jeteec/eec.py` -- worth reading
-before comparing any number against the literature.
+before comparing any number against the literature. `norm="jet_pt"` switches to
+the CMS convention. When comparing samples with different constituent
+multiplicity, compare shapes normalised to a common range: the self-pair weight
+$\sum_i z_i^2$ at $\Delta R = 0$ differs between them and shifts every visible bin.
 
 References: for energy correlators measured inside jets on CMS Open Data --
 the closest published analogue of this project -- Komiske, Moult, Thaler, Zhu,
@@ -309,12 +317,13 @@ does this -- and re-associate charge or PID afterwards by $\Delta R$ matching
 ```
 environment.yml, Dockerfile     env definition and reproducible container
 src/jeteec/jets.py              clustering wrapper (fastjet, awkward)
-src/jeteec/eec.py               EEC + normalisation check
+src/jeteec/eec.py               EEC (+ stat. errors, pT slices, chunking) + normalisation check
 src/jeteec/plot.py              mplhep styling
 src/validate_eec_pythia.py      run FIRST: validates the pipeline on truth
 src/toy_generator.py            dependency-free stand-in for Pythia
 src/tier_demo.py                what each data tier can and cannot do
 src/tier_analyses.py            one real analysis per tier
+tests/                          pytest suite; CI in .github/workflows/tests.yml
 notebooks/                      exploration (strip outputs before committing)
 data/raw|interim|processed/     not committed; see data/README.md
 results/figures|tables/          outputs; the tier_*.png are committed for the docs

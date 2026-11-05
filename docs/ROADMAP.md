@@ -1,7 +1,27 @@
 # 보완 사항과 다음 단계 (Roadmap)
 
-2026-11 기준 저장소 상태를 점검한 결과다. **현재 위치: 파이프라인은 toy 이벤트로만 검증됐고,
-Pythia 검증 결과와 실데이터 결과는 저장소에 아직 없다.**
+2026-11 기준 저장소 상태를 점검한 결과다.
+**현재 위치 (2026-11-05 갱신): 파이프라인은 toy 와 Pythia truth 로 검증됐다. 실데이터 결과는 아직 없다.**
+
+## 진행 상황
+
+| # | 상태 | 비고 |
+|---|---|---|
+| A1 테스트 | ✅ | `tests/` 22개, 1초 내. `python -m pytest -q tests` |
+| A2 CI | ✅ | `.github/workflows/tests.yml`: pytest + toy tier 분석 + Pythia 검증(소규모) |
+| A3 lock 파일 | ⚠️ 부분 | CI 용 pip 고정 목록 `requirements-ci.txt` 만 있음. **conda `environment.lock.yml` 은 실제 사용하는 conda 환경에서 export 해야 한다** (이 작업 환경에는 conda 가 없었음) |
+| A4 Pythia 검증 | ✅ | PASS, 결과는 [pythia_validation_results.md](pythia_validation_results.md). sample register P8-001/002 |
+| A5 통계 오차 | ✅ | `eec_with_errors()`: jet 단위 SEM. 최종 결과에는 event 단위 bootstrap 권장 |
+| A6 pT 구간 | ✅ | `eec_in_pt_bins()`. Pythia 에서 작은 각도 쪽이 R_L·pT 로 겹치는 것 확인 |
+| A7 정규화 규약 | ✅ | `norm="sum_pt"`(기본) / `"jet_pt"`(CMS 방식) |
+| A8 메모리 | ✅ 부분 | `chunk_size` 로 블록 처리, 메모리 상한 확보. numba 루프는 아직 필요 없어 보류 |
+| B1 hadronisation on/off | ✅ | `--compare-hadronisation`. R_L < 0.01 에서 parton/hadron 모양 비 0.28 |
+
+새로 발견한 함정: **EEC 를 서로 다른 constituent 수의 샘플끼리 비교할 때 self-pair 가중치(Σz²)
+차이 때문에 보이는 bin 전체가 위아래로 밀린다.** 모양 비교는 공통 범위로 재정규화해서 한다.
+자세한 건 [pythia_validation_results.md](pythia_validation_results.md) §3.
+
+다음 할 일: **C3 (CMS 2011A MOD 데이터셋 접근 확인)**, 그다음 단계 1 의 남은 항목(쿼크/글루온 jet 비교).
 
 판단 근거와 진행 기록은 Notion 연구 허브에 남긴다 ([WORKFLOW.md](WORKFLOW.md) §4).
 이 문서는 "무엇을, 어떤 순서로, 무엇이 되면 끝인가" 만 적는다.
@@ -73,6 +93,6 @@ A1 이 있어야 A5~A8 을 고칠 때 기존 결과가 깨지지 않았음을 �
 
 ## C. 바로 다음 한 주에 할 일
 
-1. `tests/test_eec.py`, `tests/test_jets.py` 작성 (A1)
-2. `validate_eec_pythia.py` 실행하고 결과 기록 (A4)
+1. ~~`tests/test_eec.py`, `tests/test_jets.py` 작성 (A1)~~ ✅
+2. ~~`validate_eec_pythia.py` 실행하고 결과 기록 (A4)~~ ✅
 3. CMS 2011A MOD 데이터셋 접근 가능 여부 확인 (단계 3a) — 가능하면 전체 로드맵이 크게 짧아진다
