@@ -14,7 +14,7 @@ channels:
 
 dependencies:
   # --- Python + core scientific stack ---
-  - python=3.11
+  - python=3.13          # same as the verified pip route; on 3.11 pip pulls a numpy<2 wheel of wasserstein (energyflow dep) and breaks pandas
   - numpy
   - scipy
   - pandas
