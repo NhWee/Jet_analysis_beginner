@@ -41,6 +41,7 @@ dependencies:
   - pythia8
 
   # --- Notebook / tooling ---
+  - pytest              # tests/ ; run: python -m pytest -q tests
   - jupyterlab
   - ipykernel
   - git
