@@ -21,7 +21,7 @@ Record every dataset here. Template:
 | P8-002 | Pythia8 8.318 (`pythia8mc`) | as P8-001 with `HadronLevel:all = off` | n/a (generated, seed=12345) | truth, parton level | yes | hadronisation comparison |
 | P8-003 | Pythia8 8.318 (`pythia8mc`) | HardQCD:all, pp 7 TeV, pTHatMin=150 GeV, bias2Selection pow 4 ref 150, 40k weighted events; `--preset mod2011` | n/a (generated, seed=12345) | truth, hadron level | yes | MOD-matched baseline, [`docs/pythia_validation_results.md`](../docs/pythia_validation_results.md) §4 |
 | P8-004 | Pythia8 8.318 (`pythia8mc`) | as P8-003 with `HadronLevel:all = off` | n/a (generated, seed=12345) | truth, parton level | yes | MOD-matched hadronisation comparison |
-| CMS-001 *(candidate, not downloaded)* | CMS | 2011A Jet primary dataset, Jet300, MOD HDF5 (`CMS2011AJets`, `cms`) | [10.5281/zenodo.3340205](https://doi.org/10.5281/zenodo.3340205) | reprocessed AOD | yes (PFCs) | planned: first real-data EEC |
+| CMS-001 | CMS | 2011A Jet primary dataset, Jet300, MOD HDF5 (`CMS2011AJets`, `cms`), read with `energyflow` 1.4.0. **Used: 3 of 18 files**, `CMS_Jet300_pT375-infGeV_{0,1,2}_compressed.h5` (md5-checked), stored in `raw/mod/datasets/CMS2011AJets/CMS_Jet300_pT375-infGeV/`. 284059 jets after pT > 375 GeV, \|η\| < 1.9 | [10.5281/zenodo.3340205](https://doi.org/10.5281/zenodo.3340205), CC BY 4.0 | reprocessed AOD (detector level) | yes (PFCs) | first real-data EEC, [`docs/mod_data_results.md`](../docs/mod_data_results.md) |
 
 **Reminder:** EEC requires jet *constituents*. Before registering a sample, confirm it stores
 particle-level objects inside jets (PFCandidates / tracks / topoclusters), not just jet kinematics.

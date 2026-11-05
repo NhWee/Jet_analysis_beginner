@@ -183,3 +183,12 @@ Do that before quoting a non-perturbative correction factor.
   paper's jet-quality cut (arXiv:1908.08542) has no generator-level equivalent.
 - Pythia 8 here versus Pythia 6 in MOD SIM/GEN: tune differences are expected in exactly the
   small-angle region.
+
+---
+
+## 5. First real data
+
+The CMS 2011A MOD data have now been compared with the §4 baseline: 3 of 18 files, 284059 jets,
+normalisation 1.000000. Data/Pythia shape ratio 0.58 below R_L = 0.01 and 1.32 between 0.1 and
+0.5 (detector level against truth, no unfolding). Commands, tables, figures and limitations are
+in [mod_data_results.md](mod_data_results.md).
