@@ -25,7 +25,7 @@ validates each step on synthetic events first.
 > EEC scales with $1/p_T$ and disappears when hadronisation is switched off.
 > Neither is a measurement.
 
-> **New here? Follow [`docs/GUIDE.md`](docs/GUIDE.md)** (Korean): a step-by-step walkthrough
+> **New here? Follow the walkthrough: [English](docs/GUIDE.en.md) / [한국어](docs/GUIDE.md)**. A step-by-step walkthrough
 > from installation to the first real-data EEC, explaining what each script does internally
 > and what its output means, with the exact numbers you should reproduce.
 
