@@ -76,6 +76,8 @@ docker build -t jet-eec .
 docker run -it --rm -p 8888:8888 -v "$PWD":/work jet-eec   # http://localhost:8888
 ```
 
+What to fix next and the staged plan toward real data are in [`docs/ROADMAP.md`](docs/ROADMAP.md).
+
 Working conventions -- commit rules, what goes to Notion versus GitHub, the
 reasoning behind past decisions -- are in [`docs/WORKFLOW.md`](docs/WORKFLOW.md).
 
