@@ -25,6 +25,10 @@ validates each step on synthetic events first.
 > EEC scales with $1/p_T$ and disappears when hadronisation is switched off.
 > Neither is a measurement.
 
+> **New here? Follow [`docs/GUIDE.md`](docs/GUIDE.md)** (Korean): a step-by-step walkthrough
+> from installation to the first real-data EEC, explaining what each script does internally
+> and what its output means, with the exact numbers you should reproduce.
+
 ---
 
 ## What runs today
@@ -51,7 +55,9 @@ bit for bit. If a number moves, something broke.
 ## Quick start
 
 ```bash
-# environment (Miniforge/mamba)
+# environment: pip (verified)  ...
+python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
+# ... or conda (full stack incl. PyTorch)
 mamba env create -f environment.yml
 conda activate jet-eec
 
@@ -316,7 +322,8 @@ does this -- and re-associate charge or PID afterwards by $\Delta R$ matching
 ## Repository layout
 
 ```
-environment.yml, Dockerfile     env definition and reproducible container
+environment.yml, Dockerfile     conda env definition and reproducible container
+requirements.txt                pinned pip environment (verified, used by CI)
 src/jeteec/jets.py              clustering wrapper (fastjet, awkward)
 src/jeteec/eec.py               EEC (+ stat. errors, pT slices, chunking) + normalisation check
 src/jeteec/plot.py              mplhep styling

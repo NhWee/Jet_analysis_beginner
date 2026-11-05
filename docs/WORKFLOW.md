@@ -45,8 +45,11 @@
 Jet_analysis/
 ├── README.md                 셋업과 실행 순서. 신규 진입자의 첫 페이지
 ├── environment.yml           conda 환경 정의
+├── requirements.txt          pip 환경 (버전 고정, CI 가 사용)
 ├── Dockerfile                재현용 컨테이너
 ├── docs/
+│   ├── GUIDE.md              따라 하기 가이드 (설치 → 실데이터, 단계별 의미)
+│   ├── ROADMAP.md            보완 사항과 다음 단계, 진행 상황
 │   ├── WORKFLOW.md           ← 지금 이 문서
 │   ├── data_tiers.md         티어별로 무엇이 가능한지 (메커니즘)
 │   ├── tier_physics_programme.md  티어별로 무엇을 측정할 수 있는지 (물리)
