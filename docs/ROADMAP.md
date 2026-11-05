@@ -1,13 +1,13 @@
 # 보완 사항과 다음 단계 (Roadmap)
 
 2026-11 기준 저장소 상태를 점검한 결과다.
-**현재 위치 (2026-11-05 갱신): 파이프라인은 toy 와 Pythia truth 로 검증됐다. 실데이터 결과는 아직 없다.**
+**현재 위치 (2026-11-05 갱신): 파이프라인은 toy 와 Pythia truth 로 검증됐고, 첫 실데이터 EEC (CMS 2011A MOD, 검출기 수준, unfolding 없음)를 Pythia 기준선과 비교했다.**
 
 ## 진행 상황
 
 | # | 상태 | 비고 |
 |---|---|---|
-| A1 테스트 | ✅ | `tests/` 22개, 1초 내. `python -m pytest -q tests` |
+| A1 테스트 | ✅ | `tests/` 32개, 수 초 내. `python -m pytest -q tests` |
 | A2 CI | ✅ | `.github/workflows/tests.yml`: pytest + toy tier 분석 + Pythia 검증(소규모) |
 | A3 lock 파일 | ✅ | pip: `requirements.txt`. conda: `environment.lock.yml` (linux-64, micromamba 로 생성 후 그 파일로 새 환경을 만들어 검증). conda 경로 검증 중 Python 3.11 numpy 다운그레이드와 conda-forge Pythia 버전 차이를 찾아 수정 |
 | A4 Pythia 검증 | ✅ | PASS, 결과는 [pythia_validation_results.md](pythia_validation_results.md). sample register P8-001/002 |
@@ -21,13 +21,19 @@
 차이 때문에 보이는 bin 전체가 위아래로 밀린다.** 모양 비교는 공통 범위로 재정규화해서 한다.
 자세한 건 [pythia_validation_results.md](pythia_validation_results.md) §3.
 
-C3 (MOD 데이터셋): **존재·공개 확인, 다운로드는 아직** — 단계 3 경로 (a) 참고.
+C3 (MOD 데이터셋): ✅ **다운로드하고 첫 EEC 완료** — 단계 3 경로 (a) 참고.
 
 MOD 조건 Pythia 기준선 (7 TeV, R = 0.5, leading 2, pT > 375 GeV): ✅ PASS. pT 구간 4개 모두 작은 각도 쪽이
 R_L·pT 로 한 곡선에 겹침, turnover ≈ 7–9 GeV. [pythia_validation_results.md](pythia_validation_results.md) §4.
 pTHatMin 을 임계값 근처에 두면 jet 의 3–9% 를 잃는다는 것을 확인하고 pT-hat bias 가중 생성으로 해결.
 
-다음 할 일: 네트워크에서 `zenodo.org` 허용 후 MOD 파일 1개 받아 구조 확인 → 첫 실데이터 EEC 를 이 기준선과 비교.
+첫 실데이터 EEC (단계 3a, 파일 3/18, 284059 jet): ✅ 정규화 1.000000. 결과는 [mod_data_results.md](mod_data_results.md).
+- data/Pythia 모양 비: R_L < 0.01 에서 0.58, 0.01–0.1 에서 0.91, 0.1–0.5 에서 1.32
+- 작은 각도 쪽 half-rise R_L·pT: Pythia 는 pT 구간 사이 거의 일정(2.79→2.54 GeV), 데이터는 2.94→4.57 GeV 로 증가
+- R_L ≈ 0.3 의 두 번째 극대는 중성 강입자 PFC 가 만든다 (pileup 무관)
+- 검출기 수준 vs truth 라 원인은 판정하지 않았다. `quality` 열이 전부 5 라 품질 컷은 무의미했다
+
+다음 할 일: MOD **SIM** 샘플(Pythia 6 + CMS 검출기 시뮬레이션)을 같은 스크립트로 돌려, 위 세 차이가 검출기 효과인지 확인 → MOD GEN 과 Pythia 8 기준선 비교 → unfolding.
 
 판단 근거와 진행 기록은 Notion 연구 허브에 남긴다 ([WORKFLOW.md](WORKFLOW.md) §4).
 이 문서는 "무엇을, 어떤 순서로, 무엇이 되면 끝인가" 만 적는다.
@@ -86,8 +92,9 @@ A1 이 있어야 A5~A8 을 고칠 때 기존 결과가 깨지지 않았음을 �
   | 로더 | `energyflow` 1.4.0 `energyflow.datasets.mod.load(collection="CMS2011AJets", dataset="cms")` | `energyflow` 소스 |
   | 파일 | 로더 기준 18개, 파일당 약 111 MB → 전체 약 2 GB | 로더 소스 + 웹 검색 (파일 수 미검증) |
 
-  ⚠️ **이 작업 환경에서는 다운로드하지 못했다** (`zenodo.org` 가 네트워크 정책에 막힘). 파일을 열어 본
-  것은 아니므로 실제 branch 구조와 파일 수는 처음 내려받을 때 확인할 것.
+  ✅ **2026-11-05 다운로드하고 열어 봄** (파일 3개, md5 검사 통과). 열 이름과 PFC 열 순서
+  `(pt, y, phi, m, pid, vertex)` 가 코드 가정과 같았고, 파일당 jet 100000개, 이벤트당 jet 1~2개.
+  18개 전부 받았을 때의 파일 수는 아직 확인하지 않았다.
 
   분석상 주의:
   - **R = 0.5, pT > 375 GeV 로 고정**이다. 지금 Pythia 기준선(R = 0.4, pT 100–500)과 겹치지 않는다.
@@ -98,6 +105,7 @@ A1 이 있어야 A5~A8 을 고칠 때 기존 결과가 깨지지 않았음을 �
   작업량은 크지만 최종 목적지.
 
 **완료 기준:** 실데이터 EEC 정규화 = 1, 그리고 공개된 결과(경로 a: 2201.07800, 경로 b: HEPData)와 형태 비교
+(2026-11-05: 정규화 = 1 은 충족. 2201.07800 과의 형태 비교는 아직이다. 그쪽은 unfolding 된 결과라 SIM 단계 뒤에 한다.)
 
 ### 단계 4 — 측정다운 측정
 - 검출기 효과 보정: Pythia + 검출기 시뮬레이션(또는 공개 MC)으로 unfolding
@@ -114,4 +122,6 @@ A1 이 있어야 A5~A8 을 고칠 때 기존 결과가 깨지지 않았음을 �
 
 1. ~~`tests/test_eec.py`, `tests/test_jets.py` 작성 (A1)~~ ✅
 2. ~~`validate_eec_pythia.py` 실행하고 결과 기록 (A4)~~ ✅
-3. ~~CMS 2011A MOD 데이터셋 접근 가능 여부 확인 (단계 3a)~~ ✅ 공개 확인, 다운로드는 네트워크 허용 후
+3. ~~CMS 2011A MOD 데이터셋 접근 가능 여부 확인 (단계 3a)~~ ✅ 공개 확인
+4. ~~MOD 파일 받아 첫 실데이터 EEC~~ ✅ 파일 3개, [mod_data_results.md](mod_data_results.md)
+5. MOD SIM 샘플로 같은 분석 (검출기 효과 분리)
