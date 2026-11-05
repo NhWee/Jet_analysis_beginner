@@ -9,7 +9,7 @@
 |---|---|---|
 | A1 테스트 | ✅ | `tests/` 22개, 1초 내. `python -m pytest -q tests` |
 | A2 CI | ✅ | `.github/workflows/tests.yml`: pytest + toy tier 분석 + Pythia 검증(소규모) |
-| A3 lock 파일 | ⚠️ 부분 | CI 용 pip 고정 목록 `requirements-ci.txt` 만 있음. **conda `environment.lock.yml` 은 실제 사용하는 conda 환경에서 export 해야 한다** (이 작업 환경에는 conda 가 없었음) |
+| A3 lock 파일 | ⚠️ 부분 | pip 고정 목록 `requirements.txt` 만 있음. **conda `environment.lock.yml` 은 실제 사용하는 conda 환경에서 export 해야 한다** (이 작업 환경에는 conda 가 없었음) |
 | A4 Pythia 검증 | ✅ | PASS, 결과는 [pythia_validation_results.md](pythia_validation_results.md). sample register P8-001/002 |
 | A5 통계 오차 | ✅ | `eec_with_errors()`: jet 단위 SEM. 최종 결과에는 event 단위 bootstrap 권장 |
 | A6 pT 구간 | ✅ | `eec_in_pt_bins()`. Pythia 에서 작은 각도 쪽이 R_L·pT 로 겹치는 것 확인 |
