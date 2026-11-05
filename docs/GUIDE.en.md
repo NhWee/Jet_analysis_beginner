@@ -47,7 +47,7 @@ attributed to the code or to the data, so **do not skip steps.**
 | 4 | `tier_analyses.py` | 6 s | none |
 | 5 | `validate_eec_pythia.py` | 15 s (2k) to 2 min (10k + comparison) | none |
 | 6 | `validate_eec_pythia.py --preset mod2011` | 6 min | none |
-| 7 | `analyze_mod.py` | not yet measured | **zenodo.org** |
+| 7 | `analyze_mod.py` | about 45 s download + about 1 min analysis per file | **zenodo.org** |
 
 ---
 
@@ -159,7 +159,7 @@ docker run -it --rm -p 8888:8888 -v "$PWD":/work jet-eec
 python -m pytest -q tests
 ```
 
-**What it does.** Runs 31 small checks. They use only the toy generator and a few hand-written
+**What it does.** Runs 32 small checks. They use only the toy generator and a few hand-written
 particles, with no data and no Pythia. They protect the properties of this project that must
 never break.
 
@@ -167,16 +167,16 @@ never break.
 |---|---|
 | `tests/test_eec.py` | EEC weights sum to exactly 1, a hand-computed two-particle jet, angles across φ = ±π, chunked = unchunked, the definition of the statistical error, pT slicing, jet weights |
 | `tests/test_jets.py` | **regression test for the fastjet trap**: extra fields such as `charge` must not change the jets; constituents sum to the jet; cuts applied; selecting the N hardest jets |
-| `tests/test_mod.py` | conversion of MOD-format particles: pileup removal (CHS), charged selection, rapidity → pseudorapidity |
+| `tests/test_mod.py` | conversion of MOD-format particles: pileup removal (CHS), charged selection, dropping particles by pid, rapidity → pseudorapidity |
 
 **Output:**
 
 ```
-...............................                                          [100%]
-31 passed in 1.43s
+................................                                         [100%]
+32 passed in 2.43s
 ```
 
-**Pass criterion:** `31 passed`. If any `F` appears, **do not continue.**
+**Pass criterion:** `32 passed`. If any `F` appears, **do not continue.**
 
 ---
 
@@ -467,10 +467,8 @@ step 7 reads. **Always run this step before step 7.**
 
 ## 7. First real-data EEC — CMS 2011A Open Data
 
-> **Status: the code is ready and tested, but it has never been run on the real data yet,**
-> because the network of the environment where it was written blocked zenodo.org. That is why
-> there is no expected output below. Whoever runs it first: add the result to
-> [pythia_validation_results.md](pythia_validation_results.md).
+> **Result:** the full result from 3 files (284059 jets) and its interpretation are in
+> [mod_data_results.md](mod_data_results.md). The output below is a one-file run.
 
 ```bash
 python src/analyze_mod.py --n-files 1
@@ -497,6 +495,57 @@ jets in 18 files of about 111 MB each. Read with `energyflow`, no CMSSW needed.
    charged-only EEC.
 5. Compares the shape with the step-6 Pythia table and prints data/Pythia ratios per region.
 
+**Output (one file; the first run takes about 2 min including the download):**
+
+```
+[1/4] loading MOD data ...
+Downloading CMS_Jet300_pT375-infGeV_0_compressed.h5 from https://zenodo.org/record/3340205/files/...
+      94567 jets after selection: corr_jet_pts > 375 & abs_jet_eta < 1.9 & quality >= 2
+      <corrected pT> = 448.3 GeV, weights: min 7.82e-06 max 7.82e-06 (n_eff 94567)
+      npv: mean 6.0  (pileup; CHS removes charged PU)
+[2/4] building constituents (CHS) ...
+      <n_const> all = 38.6, charged = 18.9
+[3/4] EEC ...
+      normalisation = 1.000000 (expect 1.0)
+      pT slice [GeV]   jets   peak R_L   turnover R_L (x<pT> GeV)   half-rise R_L (x<pT> GeV)   median rel. err
+        375-450      62390      0.269      0.034 ( 13.7)            0.0073 ( 2.98)            0.7%
+        450-550      23080      0.309      0.026 ( 12.6)            0.0066 ( 3.20)            1.2%
+        550-700       7352      0.269      0.022 ( 13.5)            0.0063 ( 3.78)            2.1%
+        700-1000      1653      0.030      0.030 ( 23.1)            0.0058 ( 4.51)            4.6%
+      figure -> results/figures/eec_mod2011_data_pt_slices.png
+[4/4] comparison with the Pythia 8 baseline ...
+      data shape vs all PFCs:          R_L < 0.01   0.01 < R_L < 0.1   0.1 < R_L < 0.5
+      charged PFCs only                      0.74         1.10         0.93
+      without neutral hadrons                1.11         1.03         0.95
+      data / Pythia shape, R_L < 0.01       : 0.58
+      data / Pythia shape, 0.01 < R_L < 0.1 : 0.91
+      data / Pythia shape, 0.1 < R_L < 0.5  : 1.32
+      EEC peak R_L: data 0.269, Pythia 0.019
+      half-rise R_L: data 0.0070, Pythia 0.0061
+      half-rise R_L*<pT> [GeV] by slice:   data   Pythia
+          375-450                          2.98    2.79
+          450-550                          3.20    2.66
+          550-700                          3.78    2.61
+          700-1000                         4.51    2.54
+      turnover R_L (R_L < 0.1): data 0.026, Pythia 0.019
+      figure -> results/figures/eec_mod2011_data_vs_pythia.png
+
+RESULT: PASS
+```
+
+| line | meaning |
+|---|---|
+| `94567 jets after selection` | jets passing the cuts, out of the 100000 in one file. `quality` is 5 for every jet in this file, so the quality cut removes nothing |
+| `weights: min = max` | all jet weights are equal in this sample, so the effective number of jets equals the number of jets |
+| `<n_const> all = 38.6, charged = 18.9` | PF particles per jet after CHS. Pythia truth has 42.1 |
+| `normalisation = 1.000000` | **pass criterion** |
+| `peak R_L` | the global maximum. In data the EEC is almost flat from R_L 0.02 to 0.4 with a second maximum near 0.3, so this picks a large angle unrelated to hadronisation |
+| `turnover R_L` | the maximum below R_L = 0.1. The maximum is broad, so it moves by a bin depending on the number of files |
+| `half-rise R_L` | the R_L where the small-angle side reaches half the turnover value. **Use this for scaling.** In brackets: × ⟨pT⟩ |
+| `data shape vs all PFCs` | how the shape changes per region with charged PFCs only, or without neutral hadrons (pid 130). Shows that the large-angle maximum comes from neutral hadrons |
+| `data / Pythia shape` | shape ratio per region, both normalised in the common range (step-5 warning) |
+| `half-rise R_L*<pT> by slice` | nearly constant across slices in Pythia (2.8→2.5), growing in data (3.0→4.5) |
+
 **Products:** `results/figures/eec_mod2011_data_pt_slices.png`,
 `results/figures/eec_mod2011_data_vs_pythia.png`.
 
@@ -504,14 +553,16 @@ jets in 18 files of about 111 MB each. Read with `energyflow`, no CMSSW needed.
 conversion is wrong.
 
 **Interpretation.** This compares **detector-level data with generator-level MC**, with no
-unfolding and no systematic uncertainties. Differences at small angle can come from detector
-resolution and reconstruction thresholds. It is a first look, not a measurement. A like-for-like
+unfolding and no systematic uncertainties. The small-angle difference (0.58×) can come from
+detector resolution and reconstruction thresholds. The large-angle difference (1.32×) is carried
+by neutral-hadron PF candidates. The cause of neither is established. It is a first look, not a
+measurement. A like-for-like
 comparison uses the MOD SIM sample (Pythia 6 + CMS detector simulation).
 
 **If you downloaded the file yourself:**
 
 ```bash
-python src/analyze_mod.py --files data/raw/mod/CMS_Jet300_pT375-infGeV_0_compressed.h5
+python src/analyze_mod.py --files data/raw/mod/datasets/CMS2011AJets/CMS_Jet300_pT375-infGeV/CMS_Jet300_pT375-infGeV_0_compressed.h5
 ```
 
 ---
@@ -522,11 +573,12 @@ With seed 12345 these numbers must agree. If any differs, the environment or the
 
 | step | command | numbers to check |
 |---|---|---|
-| 1 | `pytest -q tests` | `31 passed` |
+| 1 | `pytest -q tests` | `32 passed` |
 | 4 | `tier_analyses.py --n-events 2000` | jets 3237, n 4.85, R₃₂ 0.151, ⟨n_const⟩ 14.8, trimming −18.8% |
 | 5 | `validate_eec_pythia.py --n-events 2000` | 1785 jets, ⟨pT⟩ 139.2, ⟨n_const⟩ 26.8, peak 0.102 |
 | 5 | `... --n-events 10000 --compare-hadronisation` | 9129 jets, shape ratios 1.19 / 0.28 |
 | 6 | `--preset mod2011 --n-events 40000` | 14785 jets (effective 5840), ⟨pT⟩ 447.7 |
+| 7 | `analyze_mod.py --n-files 1` (needs the step-6 table) | 94567 jets, ⟨pT⟩ 448.3, ⟨n_const⟩ 38.6, data/Pythia 0.58 / 0.91 / 1.32 |
 | all | | `normalisation = 1.000000` |
 
 ---

@@ -45,7 +45,7 @@ flowchart LR
 | 4 | `tier_analyses.py` | 6초 | 불필요 |
 | 5 | `validate_eec_pythia.py` | 15초 (2k) ~ 2분 (10k + 비교) | 불필요 |
 | 6 | `validate_eec_pythia.py --preset mod2011` | 6분 | 불필요 |
-| 7 | `analyze_mod.py` | 미측정 | **zenodo.org** |
+| 7 | `analyze_mod.py` | 파일당 다운로드 약 45초 + 분석 약 1분 | **zenodo.org** |
 
 ---
 
@@ -156,23 +156,23 @@ docker run -it --rm -p 8888:8888 -v "$PWD":/work jet-eec
 python -m pytest -q tests
 ```
 
-**무엇을 하나.** 31개의 작은 검사를 돌린다. 데이터나 Pythia 없이 toy 생성기와 손으로 만든
+**무엇을 하나.** 32개의 작은 검사를 돌린다. 데이터나 Pythia 없이 toy 생성기와 손으로 만든
 입자 몇 개만 쓴다. 이 프로젝트에서 "절대 깨지면 안 되는 성질"을 지킨다.
 
 | 파일 | 검사하는 것 |
 |---|---|
 | `tests/test_eec.py` | EEC 가중치 합 = 정확히 1, 손으로 계산한 2입자 jet 값, φ 가 ±π 를 넘을 때의 각도 계산, 나눠 계산해도 결과 동일, 통계 오차 정의, pT 구간 나누기, jet 가중치 |
 | `tests/test_jets.py` | **fastjet 함정 재발 방지**: `charge` 같은 추가 필드가 붙어도 jet 이 같아야 함, constituent 합 = jet, 컷 적용, 가장 센 N개 jet 선택 |
-| `tests/test_mod.py` | MOD 형식 입자 → 파이프라인 형식 변환: pileup 제거(CHS), charged 선택, rapidity → pseudorapidity |
+| `tests/test_mod.py` | MOD 형식 입자 → 파이프라인 형식 변환: pileup 제거(CHS), charged 선택, pid 로 입자 빼기, rapidity → pseudorapidity |
 
 **출력:**
 
 ```
-...............................                                          [100%]
-31 passed in 1.43s
+................................                                         [100%]
+32 passed in 2.43s
 ```
 
-**통과 기준:** `31 passed`. 하나라도 `F` 가 나오면 **다음 단계로 가지 않는다.**
+**통과 기준:** `32 passed`. 하나라도 `F` 가 나오면 **다음 단계로 가지 않는다.**
 
 ---
 
@@ -454,9 +454,8 @@ pTHat < 300** 에서 왔다. 이 jet 들은 복사가 많은 jet 이라 빼면 E
 
 ## 7. 첫 실데이터 EEC — CMS 2011A Open Data
 
-> **현재 상태: 코드는 준비됐고 테스트를 통과했지만, 실데이터로는 아직 한 번도 돌리지 못했다.**
-> 작업 환경의 네트워크가 zenodo.org 를 막았기 때문이다. 아래 출력 예시가 없는 이유다.
-> 처음 돌리는 사람이 결과를 [pythia_validation_results.md](pythia_validation_results.md) 에 추가할 것.
+> **결과:** 파일 3개(284059 jet)로 돌린 전체 결과와 해석은 [mod_data_results.md](mod_data_results.md)
+> 에 있다. 아래 출력은 파일 1개 실행이다.
 
 ```bash
 python src/analyze_mod.py --n-files 1
@@ -480,20 +479,72 @@ python src/analyze_mod.py --n-files 1
 4. 5단계와 **같은 함수**로 정규화 검사, pT 구간별 EEC, charged 입자만의 EEC 를 계산한다.
 5. 6단계 Pythia 표와 모양을 비교하고, 영역별 data/Pythia 비를 출력한다.
 
+**출력 (파일 1개, 첫 실행은 다운로드 포함 약 2분):**
+
+```
+[1/4] loading MOD data ...
+Downloading CMS_Jet300_pT375-infGeV_0_compressed.h5 from https://zenodo.org/record/3340205/files/...
+      94567 jets after selection: corr_jet_pts > 375 & abs_jet_eta < 1.9 & quality >= 2
+      <corrected pT> = 448.3 GeV, weights: min 7.82e-06 max 7.82e-06 (n_eff 94567)
+      npv: mean 6.0  (pileup; CHS removes charged PU)
+[2/4] building constituents (CHS) ...
+      <n_const> all = 38.6, charged = 18.9
+[3/4] EEC ...
+      normalisation = 1.000000 (expect 1.0)
+      pT slice [GeV]   jets   peak R_L   turnover R_L (x<pT> GeV)   half-rise R_L (x<pT> GeV)   median rel. err
+        375-450      62390      0.269      0.034 ( 13.7)            0.0073 ( 2.98)            0.7%
+        450-550      23080      0.309      0.026 ( 12.6)            0.0066 ( 3.20)            1.2%
+        550-700       7352      0.269      0.022 ( 13.5)            0.0063 ( 3.78)            2.1%
+        700-1000      1653      0.030      0.030 ( 23.1)            0.0058 ( 4.51)            4.6%
+      figure -> results/figures/eec_mod2011_data_pt_slices.png
+[4/4] comparison with the Pythia 8 baseline ...
+      data shape vs all PFCs:          R_L < 0.01   0.01 < R_L < 0.1   0.1 < R_L < 0.5
+      charged PFCs only                      0.74         1.10         0.93
+      without neutral hadrons                1.11         1.03         0.95
+      data / Pythia shape, R_L < 0.01       : 0.58
+      data / Pythia shape, 0.01 < R_L < 0.1 : 0.91
+      data / Pythia shape, 0.1 < R_L < 0.5  : 1.32
+      EEC peak R_L: data 0.269, Pythia 0.019
+      half-rise R_L: data 0.0070, Pythia 0.0061
+      half-rise R_L*<pT> [GeV] by slice:   data   Pythia
+          375-450                          2.98    2.79
+          450-550                          3.20    2.66
+          550-700                          3.78    2.61
+          700-1000                         4.51    2.54
+      turnover R_L (R_L < 0.1): data 0.026, Pythia 0.019
+      figure -> results/figures/eec_mod2011_data_vs_pythia.png
+
+RESULT: PASS
+```
+
+| 줄 | 의미 |
+|---|---|
+| `94567 jets after selection` | 파일 하나의 jet 100000개 중 컷 통과. `quality` 는 이 파일에서 전부 5 라 품질 컷은 아무것도 빼지 않는다 |
+| `weights: min = max` | 이 샘플 안에서 jet 가중치가 모두 같다. 그래서 유효 jet 수 = jet 수 |
+| `<n_const> all = 38.6, charged = 18.9` | CHS 후 jet 당 PF 입자 수. Pythia truth 는 42.1 |
+| `normalisation = 1.000000` | **통과 기준** |
+| `peak R_L` | 전체 최댓값. 데이터는 R_L 0.02~0.4 가 거의 평평하고 0.3 근처에 두 번째 극대가 있어서, 여기서는 강입자화와 무관한 큰 각도가 잡힌다 |
+| `turnover R_L` | R_L < 0.1 안의 최댓값. 극대가 넓어서 파일 수에 따라 한 bin 씩 움직인다 |
+| `half-rise R_L` | 작은 각도 쪽이 turnover 값의 절반에 닿는 R_L. **scaling 을 볼 때는 이 값을 쓴다.** 괄호 안이 ×⟨pT⟩ |
+| `data shape vs all PFCs` | charged 만, 또는 중성 강입자(pid 130)를 뺐을 때 모양이 영역별로 몇 배인가. 큰 각도 극대가 중성 강입자에서 온다는 것을 보여 준다 |
+| `data / Pythia shape` | 영역별 모양 비. 공통 범위로 정규화한 모양끼리 나눈다(5단계 경고) |
+| `half-rise R_L*<pT> by slice` | Pythia 는 구간 사이 거의 일정(2.8→2.5), 데이터는 커진다(3.0→4.5) |
+
 **결과물:** `results/figures/eec_mod2011_data_pt_slices.png`,
 `results/figures/eec_mod2011_data_vs_pythia.png`.
 
 **통과 기준:** `normalisation = 1.000000`. 실데이터에서도 1 이 아니면 입자 변환이 틀린 것이다.
 
 **해석할 때 주의.** 이것은 **검출기 수준 데이터와 생성기 수준 MC 의 비교**다. unfolding 도
-체계 오차도 없다. 작은 각도의 차이는 검출기 분해능과 재구성 문턱 때문에 생길 수 있다. 측정이
+체계 오차도 없다. 작은 각도의 차이(0.58배)는 검출기 분해능과 재구성 문턱 때문에 생길 수 있다.
+큰 각도의 차이(1.32배)는 중성 강입자 PF 입자가 만든다. 둘 다 원인을 정하지 않았다. 측정이
 아니라 첫 확인이다. 데이터와 같은 수준의 비교는 MOD 의 SIM(Pythia 6 + CMS 검출기 시뮬레이션)
 샘플로 해야 한다.
 
 **파일을 직접 받은 경우:**
 
 ```bash
-python src/analyze_mod.py --files data/raw/mod/CMS_Jet300_pT375-infGeV_0_compressed.h5
+python src/analyze_mod.py --files data/raw/mod/datasets/CMS2011AJets/CMS_Jet300_pT375-infGeV/CMS_Jet300_pT375-infGeV_0_compressed.h5
 ```
 
 ---
@@ -504,11 +555,12 @@ seed 12345 로 돌렸을 때 반드시 같아야 하는 숫자다. 하나라도 
 
 | 단계 | 명령 | 확인할 숫자 |
 |---|---|---|
-| 1 | `pytest -q tests` | `31 passed` |
+| 1 | `pytest -q tests` | `32 passed` |
 | 4 | `tier_analyses.py --n-events 2000` | jets 3237, n 4.85, R₃₂ 0.151, ⟨n_const⟩ 14.8, trimming −18.8% |
 | 5 | `validate_eec_pythia.py --n-events 2000` | 1785 jets, ⟨pT⟩ 139.2, ⟨n_const⟩ 26.8, peak 0.102 |
 | 5 | `... --n-events 10000 --compare-hadronisation` | 9129 jets, 모양 비 1.19 / 0.28 |
 | 6 | `--preset mod2011 --n-events 40000` | 14785 jets (effective 5840), ⟨pT⟩ 447.7 |
+| 7 | `analyze_mod.py --n-files 1` (6단계 표 필요) | 94567 jets, ⟨pT⟩ 448.3, ⟨n_const⟩ 38.6, data/Pythia 0.58 / 0.91 / 1.32 |
 | 전부 | | `normalisation = 1.000000` |
 
 ---
