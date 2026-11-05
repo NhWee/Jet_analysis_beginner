@@ -21,7 +21,9 @@
 차이 때문에 보이는 bin 전체가 위아래로 밀린다.** 모양 비교는 공통 범위로 재정규화해서 한다.
 자세한 건 [pythia_validation_results.md](pythia_validation_results.md) §3.
 
-다음 할 일: **C3 (CMS 2011A MOD 데이터셋 접근 확인)**, 그다음 단계 1 의 남은 항목(쿼크/글루온 jet 비교).
+C3 (MOD 데이터셋): **존재·공개 확인, 다운로드는 아직** — 단계 3 경로 (a) 참고.
+
+다음 할 일: 네트워크에서 `zenodo.org` 허용 후 MOD 파일 1개 받아 구조 확인, R = 0.5 · pT > 375 GeV Pythia 기준선.
 
 판단 근거와 진행 기록은 Notion 연구 허브에 남긴다 ([WORKFLOW.md](WORKFLOW.md) §4).
 이 문서는 "무엇을, 어떤 순서로, 무엇이 되면 끝인가" 만 적는다.
@@ -68,13 +70,26 @@ A1 이 있어야 A5~A8 을 고칠 때 기존 결과가 깨지지 않았음을 �
 ### 단계 3 — 첫 실데이터 EEC
 두 경로 중 하나를 고른다 (결정 기록을 Notion 에 남길 것).
 
-- **경로 (a) CMS 2011A MOD 데이터셋 — 먼저 확인할 가치가 큼.**
-  Komiske–Moult–Thaler–Zhu ([arXiv:2201.07800](https://arxiv.org/abs/2201.07800)) 가 쓴
-  CMS 2011 Jet primary dataset 을 PFCandidate 포함 Python 형식으로 변환한 공개본이다.
-  `energyflow` 패키지에서 읽을 수 있는 것으로 알려져 있다. 사실이라면 **CMSSW 없이 바로 EEC 를
-  실데이터로 계산**할 수 있고, 같은 논문 결과와 직접 비교할 수 있다.
-  ⚠️ 접근 방법·현재 가용성은 확인 필요. 확인되면 [tier_physics_programme.md](tier_physics_programme.md)
-  §0 의 "EEC 는 CMSSW 가 최소 한 번 필요" 문장을 수정해야 한다.
+- **경로 (a) CMS 2011A MOD 데이터셋 — 존재와 공개 여부 확인됨 (2026-11-05).**
+  CMS 2011A Jet primary dataset 의 AOD 를 MIT 그룹이 PFCandidate 포함 HDF5 로 재처리한 공개본.
+  `energyflow` 로 CMSSW 없이 읽는다.
+
+  | 항목 | 내용 | 확인 경로 |
+  |---|---|---|
+  | 데이터 | Zenodo [10.5281/zenodo.3340205](https://doi.org/10.5281/zenodo.3340205), CC BY 4.0, 2019-08 공개 | 웹 검색 |
+  | 내용 | 1,785,625 jets, Jet300 trigger, 이벤트의 leading 2 jet, **anti-kT R = 0.5**, 보정 후 **pT > 375 GeV**, PFCandidate 포함 | 웹 검색 |
+  | MC | Pythia 6 + CMS 검출기 시뮬레이션(SIM)과 generator-level(GEN), 생성 pT 구간 8개 (170 GeV ~ ∞) | `energyflow` 소스 |
+  | 로더 | `energyflow` 1.4.0 `energyflow.datasets.mod.load(collection="CMS2011AJets", dataset="cms")` | `energyflow` 소스 |
+  | 파일 | 로더 기준 18개, 파일당 약 111 MB → 전체 약 2 GB | 로더 소스 + 웹 검색 (파일 수 미검증) |
+
+  ⚠️ **이 작업 환경에서는 다운로드하지 못했다** (`zenodo.org` 가 네트워크 정책에 막힘). 파일을 열어 본
+  것은 아니므로 실제 branch 구조와 파일 수는 처음 내려받을 때 확인할 것.
+
+  분석상 주의:
+  - **R = 0.5, pT > 375 GeV 로 고정**이다. 지금 Pythia 기준선(R = 0.4, pT 100–500)과 겹치지 않는다.
+    데이터와 비교할 Pythia 기준선을 같은 조건으로 다시 만들어야 한다.
+  - Run 1 (7 TeV) 데이터다. CMS αs 측정(Run 2, 13 TeV)과 직접 비교 대상이 아니다.
+  - SIM/GEN 쌍이 함께 있으므로 **검출기 보정(unfolding) 연습까지 이 데이터셋 하나로** 가능하다.
 - **경로 (b) MiniAOD → PFNano (CMSSW Docker 1회).** Run 2, 높은 통계, CMS αs 측정과 같은 조건.
   작업량은 크지만 최종 목적지.
 
@@ -95,4 +110,4 @@ A1 이 있어야 A5~A8 을 고칠 때 기존 결과가 깨지지 않았음을 �
 
 1. ~~`tests/test_eec.py`, `tests/test_jets.py` 작성 (A1)~~ ✅
 2. ~~`validate_eec_pythia.py` 실행하고 결과 기록 (A4)~~ ✅
-3. CMS 2011A MOD 데이터셋 접근 가능 여부 확인 (단계 3a) — 가능하면 전체 로드맵이 크게 짧아진다
+3. ~~CMS 2011A MOD 데이터셋 접근 가능 여부 확인 (단계 3a)~~ ✅ 공개 확인, 다운로드는 네트워크 허용 후

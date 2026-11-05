@@ -19,6 +19,7 @@ Record every dataset here. Template:
 |----|-----------|------------------|-------------------|------|---------------|---------|
 | P8-001 | Pythia8 8.318 (`pythia8mc`) | HardQCD:all, pp 13 TeV, pTHatMin=100 GeV, 10k events | n/a (generated, seed=12345) | truth, hadron level | yes | EEC validation, [`docs/pythia_validation_results.md`](../docs/pythia_validation_results.md) |
 | P8-002 | Pythia8 8.318 (`pythia8mc`) | as P8-001 with `HadronLevel:all = off` | n/a (generated, seed=12345) | truth, parton level | yes | hadronisation comparison |
+| CMS-001 *(candidate, not downloaded)* | CMS | 2011A Jet primary dataset, Jet300, MOD HDF5 (`CMS2011AJets`, `cms`) | [10.5281/zenodo.3340205](https://doi.org/10.5281/zenodo.3340205) | reprocessed AOD | yes (PFCs) | planned: first real-data EEC |
 
 **Reminder:** EEC requires jet *constituents*. Before registering a sample, confirm it stores
 particle-level objects inside jets (PFCandidates / tracks / topoclusters), not just jet kinematics.
