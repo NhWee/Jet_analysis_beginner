@@ -17,8 +17,8 @@ Record every dataset here. Template:
 
 | ID | Experiment | Dataset / record | DOI or record URL | Tier | Constituents? | Used in |
 |----|-----------|------------------|-------------------|------|---------------|---------|
-| _example_ | Pythia8 | dijet pp 13 TeV, pThat>100 | n/a (generated, seed=12345) | truth | yes | EEC validation |
-|  |  |  |  |  |  |  |
+| P8-001 | Pythia8 8.318 (`pythia8mc`) | HardQCD:all, pp 13 TeV, pTHatMin=100 GeV, 10k events | n/a (generated, seed=12345) | truth, hadron level | yes | EEC validation, [`docs/pythia_validation_results.md`](../docs/pythia_validation_results.md) |
+| P8-002 | Pythia8 8.318 (`pythia8mc`) | as P8-001 with `HadronLevel:all = off` | n/a (generated, seed=12345) | truth, parton level | yes | hadronisation comparison |
 
 **Reminder:** EEC requires jet *constituents*. Before registering a sample, confirm it stores
 particle-level objects inside jets (PFCandidates / tracks / topoclusters), not just jet kinematics.
