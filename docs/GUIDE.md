@@ -124,7 +124,7 @@ python -c "import awkward, fastjet, vector, uproot, energyflow, pythia8mc, torch
 
 **검증.** 2026-11-05 에 micromamba 2.10.0 으로 `environment.yml` 을 만들고 1–6단계를
 돌렸다. 테스트, 모든 스크립트, 노트북이 통과했고, `tier_analyses.py` 와 Pythia 검증 출력은
-pip 경로와 **diff 상 완전히 같았다** (2000 이벤트 기준. `environment.lock.yml` 로 새로 만든 환경에서도 같다).
+pip 경로와 **diff 상 완전히 같았다** (2000 이벤트, 10000 이벤트 + hadronisation 비교, `--preset mod2011` 40000 이벤트 모두. 2000 이벤트 실행은 `environment.lock.yml` 로 새로 만든 환경에서도 같다).
 
 검증하면서 고친 것 두 가지 (같은 함정에 빠지지 않도록 적어 둔다):
 

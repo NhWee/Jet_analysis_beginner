@@ -126,7 +126,7 @@ python -c "import awkward, fastjet, vector, uproot, energyflow, pythia8mc, torch
 
 **Verification.** On 2026-11-05 `environment.yml` was built with micromamba 2.10.0 and steps
 1–6 were run. Tests, every script and the notebook passed, and the outputs of `tier_analyses.py`
-and the Pythia validation were **identical (by diff) to the pip route** (at 2000 events; the same holds for a fresh environment built from `environment.lock.yml`).
+and the Pythia validation were **identical (by diff) to the pip route** (at 2000 events, at 10000 events with the hadronisation comparison, and for `--preset mod2011` at 40000 events. The 2000-event run is also identical in a fresh environment built from `environment.lock.yml`).
 
 Two things were fixed while verifying (written down so nobody falls into them again):
 
