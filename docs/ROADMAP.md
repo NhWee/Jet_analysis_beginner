@@ -23,7 +23,11 @@
 
 C3 (MOD 데이터셋): **존재·공개 확인, 다운로드는 아직** — 단계 3 경로 (a) 참고.
 
-다음 할 일: 네트워크에서 `zenodo.org` 허용 후 MOD 파일 1개 받아 구조 확인, R = 0.5 · pT > 375 GeV Pythia 기준선.
+MOD 조건 Pythia 기준선 (7 TeV, R = 0.5, leading 2, pT > 375 GeV): ✅ PASS. pT 구간 4개 모두 작은 각도 쪽이
+R_L·pT 로 한 곡선에 겹침, turnover ≈ 7–9 GeV. [pythia_validation_results.md](pythia_validation_results.md) §4.
+pTHatMin 을 임계값 근처에 두면 jet 의 3–9% 를 잃는다는 것을 확인하고 pT-hat bias 가중 생성으로 해결.
+
+다음 할 일: 네트워크에서 `zenodo.org` 허용 후 MOD 파일 1개 받아 구조 확인 → 첫 실데이터 EEC 를 이 기준선과 비교.
 
 판단 근거와 진행 기록은 Notion 연구 허브에 남긴다 ([WORKFLOW.md](WORKFLOW.md) §4).
 이 문서는 "무엇을, 어떤 순서로, 무엇이 되면 끝인가" 만 적는다.
