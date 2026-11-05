@@ -110,8 +110,33 @@ mamba env create -f environment.yml
 conda activate jet-eec
 ```
 
-conda-forge 판 Pythia 는 `import pythia8` 이고 PyPI 판은 `import pythia8mc` 다. 스크립트는
-둘 다 시도하므로 어느 쪽이든 된다. 이 경로는 이 문서를 쓴 환경에서 직접 검증하지 못했다.
+**버전까지 똑같이 맞추려면** (linux-64 전용) `environment.yml` 대신 `environment.lock.yml` 을 쓴다:
+
+```bash
+mamba env create -f environment.lock.yml
+```
+
+**확인:**
+
+```bash
+python -c "import awkward, fastjet, vector, uproot, energyflow, pythia8mc, torch, coffea; print('ok')"
+```
+
+**검증.** 2026-11-05 에 micromamba 2.10.0 으로 `environment.yml` 을 만들고 1–6단계를
+돌렸다. 테스트, 모든 스크립트, 노트북이 통과했고, `tier_analyses.py` 와 Pythia 검증 출력은
+pip 경로와 **diff 상 완전히 같았다** (2000 이벤트 기준. `environment.lock.yml` 로 새로 만든 환경에서도 같다).
+
+검증하면서 고친 것 두 가지 (같은 함정에 빠지지 않도록 적어 둔다):
+
+- **Python 3.13 을 쓴다.** 3.11 에서는 `energyflow` 가 끌어오는 `wasserstein` 의 미리 빌드된
+  wheel 이 numpy < 2 를 요구한다. 그래서 pip 단계가 conda 의 numpy 를 1.26 으로 내리고
+  `import pandas` 가 깨진다. 환경 생성 자체는 오류 없이 "성공"으로 끝나서 쓰기 전까지 모른다.
+- **Pythia 는 conda-forge 가 아니라 PyPI 의 `pythia8mc` 를 쓴다.** conda-forge 판(8.312)은 PyPI 판
+  (8.318)과 버전이 달라서 같은 seed 로도 다른 이벤트를 만든다 (2000 이벤트에서 jet 1828 vs
+  1785). 그러면 아래 재현 확인표의 숫자가 맞지 않는다.
+
+`conda activate jet-eec` 를 빠뜨리지 말 것. 활성화하지 않고 경로만 잡으면 패키지가 쓰는 환경
+변수가 설정되지 않는다.
 
 ### 방법 C — Docker
 
@@ -494,6 +519,9 @@ seed 12345 로 돌렸을 때 반드시 같아야 하는 숫자다. 하나라도 
 |---|---|---|
 | `ModuleNotFoundError: No module named 'uproot'` (또는 다른 패키지) | 가상환경이 활성화되지 않았거나 설치 누락 | `source .venv/bin/activate` 후 `pip install -r requirements.txt` |
 | `No module named 'pythia8'` | PyPI 판 이름은 `pythia8mc` | 스크립트가 자동으로 둘 다 시도한다. 직접 import 할 때만 주의 |
+| `Pythia initialisation failed` (앞에 `unmatched version numbers` / `unknown key`) | Pythia 가 XML 데이터 파일을 못 찾음. conda-forge 판은 환경을 **활성화**해야 `PYTHIA8DATA` 가 설정된다 | `conda activate jet-eec`, 또는 `PYTHIA8DATA=<prefix>/share/Pythia8/xmldoc` |
+| conda 환경에서 Pythia 숫자가 확인표와 다름 | conda-forge 판 `pythia8` 이 설치됨 (버전 다름) | 현재 `environment.yml` 로 환경을 다시 만든다 (PyPI `pythia8mc==8.318.3`) |
+| conda 환경에서 `import pandas` 실패 | Python 3.11 환경 (numpy 다운그레이드) | 현재 `environment.yml` (Python 3.13) 로 다시 만든다 |
 | 노트북에서 `존재함: False` | 연습용 파일이 없음 | `python src/make_sample.py` 먼저 |
 | `analyze_mod.py` 가 다운로드에서 멈추거나 403 | 네트워크가 zenodo.org 를 막음 | 클라우드 환경이면 Allowed domains 에 `zenodo.org` 추가 후 **새 세션**. 또는 브라우저로 받아 `--files` |
 | 7단계가 "no Pythia table" | 6단계를 안 돌림 (표는 커밋되지 않음) | 6단계 먼저 |

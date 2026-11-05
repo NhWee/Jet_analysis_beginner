@@ -112,8 +112,34 @@ mamba env create -f environment.yml
 conda activate jet-eec
 ```
 
-The conda-forge Pythia is `import pythia8`; the PyPI one is `import pythia8mc`. The scripts try
-both, so either works. This route was not verified in the environment where this guide was written.
+**To match every version exactly** (linux-64 only), use `environment.lock.yml` instead of `environment.yml`:
+
+```bash
+mamba env create -f environment.lock.yml
+```
+
+**Check:**
+
+```bash
+python -c "import awkward, fastjet, vector, uproot, energyflow, pythia8mc, torch, coffea; print('ok')"
+```
+
+**Verification.** On 2026-11-05 `environment.yml` was built with micromamba 2.10.0 and steps
+1–6 were run. Tests, every script and the notebook passed, and the outputs of `tier_analyses.py`
+and the Pythia validation were **identical (by diff) to the pip route** (at 2000 events; the same holds for a fresh environment built from `environment.lock.yml`).
+
+Two things were fixed while verifying (written down so nobody falls into them again):
+
+- **Python 3.13 is used.** On 3.11 the prebuilt wheel of `wasserstein`, pulled in by
+  `energyflow`, requires numpy < 2. The pip stage then downgrades conda's numpy to 1.26 and
+  `import pandas` breaks. Creating the environment still "succeeds" without an error, so you only
+  find out when you use it.
+- **Pythia comes from PyPI (`pythia8mc`), not conda-forge.** The conda-forge build (8.312) is a
+  different version from PyPI (8.318) and generates different events for the same seed (1828 vs
+  1785 jets in 2000 events), so the reproduction checklist below would not match.
+
+Do not skip `conda activate jet-eec`. Putting the environment on PATH without activating it
+leaves the environment variables that packages rely on unset.
 
 ### Option C — Docker
 
@@ -511,6 +537,9 @@ With seed 12345 these numbers must agree. If any differs, the environment or the
 |---|---|---|
 | `ModuleNotFoundError: No module named 'uproot'` (or another package) | virtual environment not active, or not installed | `source .venv/bin/activate`, then `pip install -r requirements.txt` |
 | `No module named 'pythia8'` | the PyPI build is called `pythia8mc` | the scripts try both; only matters when importing it yourself |
+| `Pythia initialisation failed` (preceded by `unmatched version numbers` / `unknown key`) | Pythia cannot find its XML data. The conda-forge build sets `PYTHIA8DATA` only when the environment is **activated** | `conda activate jet-eec`, or `PYTHIA8DATA=<prefix>/share/Pythia8/xmldoc` |
+| Pythia numbers in a conda environment differ from the checklist | the conda-forge `pythia8` is installed (different version) | recreate the environment from the current `environment.yml` (PyPI `pythia8mc==8.318.3`) |
+| `import pandas` fails in a conda environment | a Python 3.11 environment (numpy downgrade) | recreate it from the current `environment.yml` (Python 3.13) |
 | notebook prints `존재함: False` ("exists: False") | practice file missing | run `python src/make_sample.py` first |
 | `analyze_mod.py` hangs on download or gets 403 | network blocks zenodo.org | in a cloud environment, add `zenodo.org` to Allowed domains and start a **new session**; or download in a browser and pass `--files` |
 | step 7 says "no Pythia table" | step 6 not run (tables are not committed) | run step 6 first |
