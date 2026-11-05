@@ -15,6 +15,13 @@ Conventions made explicit (these are the usual source of disagreement between pa
   binning, so they are harmlessly dropped by the histogram. Set ``include_self=False`` to
   exclude them explicitly.
 * **Angle** — ``dR_ij = sqrt(dEta^2 + dPhi^2)`` with dPhi wrapped to (-pi, pi].
+* **Alternative normalisation** — ``norm="jet_pt"`` divides by the clustered jet pT squared
+  instead, as CMS does (arXiv:2402.13864). The weights then no longer sum to exactly 1, so
+  state which convention was used whenever a number is compared with the literature.
+* **Uncertainties** — pairs inside one jet are correlated, so ``sqrt(sum w^2)`` per bin is
+  wrong. The error returned by :func:`eec_with_errors` is the standard error of the mean of
+  the *per-jet* histograms, which treats jets (not pairs) as the independent unit. Jets from
+  the same event are still mildly correlated; for a final result use an event-level bootstrap.
 
 References:
   Komiske, Moult, Thaler, Zhu, "Analyzing N-point energy correlators inside
@@ -26,6 +33,8 @@ References:
 """
 
 from __future__ import annotations
+
+from dataclasses import dataclass
 
 import awkward as ak
 import numpy as np
@@ -52,12 +61,50 @@ def _delta_r(constituents: ak.Array) -> tuple[ak.Array, ak.Array]:
     return dr, w
 
 
-def eec(
+@dataclass(frozen=True)
+class EECResult:
+    """A binned EEC with its statistical uncertainty.
+
+    ``values`` and ``errors`` are ``dSigma/dlog(R_L)`` per jet; ``errors`` is the standard
+    error of the mean over jets. ``n_jets`` is the number of jets averaged over.
+    """
+
+    centres: np.ndarray
+    edges: np.ndarray
+    values: np.ndarray
+    errors: np.ndarray
+    n_jets: int
+
+
+def _iter_chunks(n: int, chunk_size: int | None):
+    step = n if not chunk_size else int(chunk_size)
+    for lo in range(0, n, max(step, 1)):
+        yield lo, min(lo + step, n)
+
+
+def _weights(constituents, norm, jet_pt):
+    """Pair separations and normalised pair weights for a block of jets."""
+    dr, w = _delta_r(constituents)
+    if norm == "sum_pt":
+        denom = ak.sum(constituents.pt, axis=-1)
+    elif norm == "jet_pt":
+        if jet_pt is None:
+            raise ValueError('norm="jet_pt" needs jet_pt (one value per jet)')
+        denom = jet_pt
+    else:
+        raise ValueError(f'unknown norm {norm!r}; choose "sum_pt" or "jet_pt"')
+    return dr, w / denom**2
+
+
+def eec_with_errors(
     constituents: ak.Array,
     bins: np.ndarray | None = None,
     include_self: bool = True,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Compute the jet-normalised two-point EEC, averaged over all jets.
+    norm: str = "sum_pt",
+    jet_pt=None,
+    chunk_size: int | None = None,
+) -> EECResult:
+    """Compute the jet-averaged two-point EEC together with its statistical error.
 
     Parameters
     ----------
@@ -69,50 +116,129 @@ def eec(
     include_self : bool
         Include ``i == j`` self-pairs. They land at dR = 0 and are dropped by
         log-spaced bins either way; keeping them makes the weights sum to 1.
-
-    Returns
-    -------
-    centres : np.ndarray
-        Geometric bin centres.
-    values : np.ndarray
-        ``dSigma/dlog(R_L)`` per jet — i.e. summed weights per bin, divided by bin
-        width in log space and by the number of jets.
+    norm : {"sum_pt", "jet_pt"}
+        Per-jet normalisation; see the module docstring.
+    jet_pt : array-like, optional
+        Clustered jet pT, one per jet. Required for ``norm="jet_pt"``.
+    chunk_size : int, optional
+        Process this many jets at a time. All pairs of a block are held in memory at
+        once (O(sum n_i^2)), so set this for large samples. ``None`` = one block.
     """
     if bins is None:
         bins = np.logspace(-3, 0, 51)
-
-    dr, w = _delta_r(constituents)
-
-    # Normalise per jet: sum of constituent pT, squared
-    sum_pt = ak.sum(constituents.pt, axis=-1)
-    w = w / sum_pt**2
-
-    if not include_self:
-        mask = dr > 0
-        dr, w = dr[mask], w[mask]
+    edges = np.asarray(bins, dtype=float)
+    nb = len(edges) - 1
 
     n_jets = len(constituents)
     if n_jets == 0:
         raise ValueError("no jets supplied")
+    if jet_pt is not None:
+        jet_pt = np.asarray(ak.to_numpy(jet_pt), dtype=float)
+        if len(jet_pt) != n_jets:
+            raise ValueError("jet_pt must have one entry per jet")
 
-    dr_flat = ak.to_numpy(ak.flatten(dr, axis=None))
-    w_flat = ak.to_numpy(ak.flatten(w, axis=None))
+    total = np.zeros(nb)     # sum over jets of per-jet bin content
+    total_sq = np.zeros(nb)  # sum over jets of (per-jet bin content)^2
 
-    counts, edges = np.histogram(dr_flat, bins=bins, weights=w_flat)
+    for lo, hi in _iter_chunks(n_jets, chunk_size):
+        block = constituents[lo:hi]
+        dr, w = _weights(block, norm, None if jet_pt is None else jet_pt[lo:hi])
+        if not include_self:
+            mask = dr > 0
+            dr, w = dr[mask], w[mask]
+
+        # Jet-summed content via np.histogram, so a single block reproduces the
+        # original implementation exactly.
+        dr_flat = ak.to_numpy(ak.flatten(dr, axis=None))
+        w_flat = ak.to_numpy(ak.flatten(w, axis=None))
+        counts, _ = np.histogram(dr_flat, bins=edges, weights=w_flat)
+        total += counts
+
+        # Per-jet content for the variance: index pairs by (jet, bin).
+        jet_idx = np.repeat(np.arange(hi - lo), ak.to_numpy(ak.num(dr, axis=-1)))
+        b = np.searchsorted(edges, dr_flat, side="right") - 1
+        b[dr_flat == edges[-1]] = nb - 1  # np.histogram: last edge is inclusive
+        ok = (b >= 0) & (b < nb)
+        per_jet = np.bincount(jet_idx[ok] * nb + b[ok], weights=w_flat[ok],
+                              minlength=(hi - lo) * nb).reshape(hi - lo, nb)
+        total_sq += (per_jet**2).sum(axis=0)
 
     dlog = np.diff(np.log(edges))
-    values = counts / dlog / n_jets
-    centres = np.sqrt(edges[:-1] * edges[1:])
-    return centres, values
+    mean = total / n_jets
+    if n_jets > 1:
+        var = np.clip(total_sq / n_jets - mean**2, 0, None) * n_jets / (n_jets - 1)
+        sem = np.sqrt(var / n_jets)
+    else:
+        sem = np.full(nb, np.nan)
+
+    return EECResult(
+        centres=np.sqrt(edges[:-1] * edges[1:]),
+        edges=edges,
+        values=total / dlog / n_jets,
+        errors=sem / dlog,
+        n_jets=n_jets,
+    )
 
 
-def normalisation_check(constituents: ak.Array) -> float:
+def eec(
+    constituents: ak.Array,
+    bins: np.ndarray | None = None,
+    include_self: bool = True,
+    norm: str = "sum_pt",
+    jet_pt=None,
+    chunk_size: int | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Jet-averaged two-point EEC as ``(centres, values)``.
+
+    ``values`` is ``dSigma/dlog(R_L)`` per jet: summed weights per bin, divided by the bin
+    width in log space and by the number of jets. Use :func:`eec_with_errors` when the
+    statistical uncertainty is needed; arguments are the same.
+    """
+    r = eec_with_errors(constituents, bins=bins, include_self=include_self,
+                        norm=norm, jet_pt=jet_pt, chunk_size=chunk_size)
+    return r.centres, r.values
+
+
+def eec_in_pt_bins(
+    constituents: ak.Array,
+    jet_pt,
+    pt_edges,
+    bins: np.ndarray | None = None,
+    **kwargs,
+) -> list[tuple[float, float, EECResult | None]]:
+    """EEC in jet-pT slices: ``[(pt_lo, pt_hi, EECResult or None), ...]``.
+
+    The hadronisation turnover sits at ``R_L ~ Lambda_QCD / pT``, so it only becomes
+    visible once jets are separated by pT. Slices with no jets give ``None``.
+    Extra keyword arguments go to :func:`eec_with_errors`.
+    """
+    jet_pt = np.asarray(ak.to_numpy(jet_pt), dtype=float)
+    if len(jet_pt) != len(constituents):
+        raise ValueError("jet_pt must have one entry per jet")
+    out = []
+    for lo, hi in zip(pt_edges[:-1], pt_edges[1:]):
+        sel = (jet_pt >= lo) & (jet_pt < hi)
+        if not sel.any():
+            out.append((float(lo), float(hi), None))
+            continue
+        if kwargs.get("norm") == "jet_pt":
+            kwargs = {**kwargs, "jet_pt": jet_pt[sel]}
+        out.append((float(lo), float(hi),
+                    eec_with_errors(constituents[sel], bins=bins, **kwargs)))
+    return out
+
+
+def normalisation_check(constituents: ak.Array, chunk_size: int | None = None) -> float:
     """Return the total EEC weight summed over all pairs, averaged per jet.
 
-    Should be ~1.0 by construction. A useful unit test on any new sample: if it is
-    not 1, the constituent collection or the pT normalisation is wrong.
+    Should be 1.0 by construction (``norm="sum_pt"``). A useful unit test on any new
+    sample: if it is not 1, the constituent collection or the pT normalisation is wrong.
     """
-    _, w = _delta_r(constituents)
-    sum_pt = ak.sum(constituents.pt, axis=-1)
-    total = ak.sum(w, axis=-1) / sum_pt**2
-    return float(ak.mean(total))
+    n = len(constituents)
+    if n == 0:
+        raise ValueError("no jets supplied")
+    acc = 0.0
+    for lo, hi in _iter_chunks(n, chunk_size):
+        _, w = _weights(constituents[lo:hi], "sum_pt", None)
+        acc += float(ak.sum(ak.sum(w, axis=-1)))
+    return acc / n
