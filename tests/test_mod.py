@@ -35,6 +35,13 @@ def test_charged_only():
     np.testing.assert_allclose(ak.to_numpy(c.pt[0]), [50.0, 5.0])
 
 
+def test_drop_pids_uses_abs_pdg_id():
+    c = pfcs_to_constituents([JET], chs=False, drop_pids=(130,))
+    np.testing.assert_allclose(ak.to_numpy(c.pt[0]), [100.0, 50.0, 5.0])
+    c = pfcs_to_constituents([JET], chs=False, drop_pids=(211,))
+    np.testing.assert_allclose(ak.to_numpy(c.pt[0]), [100.0, 3.0])
+
+
 def test_rapidity_converted_to_eta():
     c = pfcs_to_constituents([JET], chs=False)
     eta = ak.to_numpy(c.eta[0])

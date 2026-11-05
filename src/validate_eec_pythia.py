@@ -247,6 +247,7 @@ def main() -> int:
                                     chunk_size=args.chunk_size, jet_weights=jw)
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 5.5), sharey=True)
     plotted = []
+    sl_lo, sl_hi, sl_pt, sl_val = [], [], [], []
     print("      pT slice [GeV]   jets  (eff)   peak R_L   peak R_L*<pT> [GeV]   median rel. err")
     for lo, hi, r in slices:
         if r is None:
@@ -259,6 +260,7 @@ def main() -> int:
         rel = float(np.median(r.errors[good] / r.values[good]))
         print(f"      {lo:5.0f}-{hi:<5.0f} {r.n_jets:7d} {r.n_eff:6.0f}   {pk:8.3f}   {pk * mean_pt:12.1f}"
               f"            {rel:6.1%}")
+        sl_lo.append(lo), sl_hi.append(hi), sl_pt.append(mean_pt), sl_val.append(r.values)
         lab = f"{lo:.0f}-{hi:.0f} GeV"
         v, e = r.values[good], r.errors[good]
         lo_edge, _ = plot_mod.log_band(v, e)
@@ -277,6 +279,11 @@ def main() -> int:
     plot_mod.save(fig, str(out))
     plt.close(fig)
     print(f"      figure -> {out.relative_to(REPO)}")
+    # Same table again, now with the per-slice EECs (read by analyze_mod.py).
+    np.savez(table, edges=res.edges, values=res.values, errors=res.errors,
+             n_jets=res.n_jets, n_eff=res.n_eff, slice_lo=np.array(sl_lo),
+             slice_hi=np.array(sl_hi), slice_mean_pt=np.array(sl_pt),
+             slice_values=np.array(sl_val))
 
     if args.compare_hadronisation:
         print(f"[5/{n_steps}] same seed, hadronisation off ...")

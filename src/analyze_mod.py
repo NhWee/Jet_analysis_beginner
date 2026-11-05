@@ -42,16 +42,25 @@ from jeteec import plot as plot_mod  # noqa: E402
 REPO = pathlib.Path(__file__).resolve().parents[1]
 RAW = REPO / "data" / "raw" / "mod"
 PT_EDGES = (375.0, 450.0, 550.0, 700.0, 1000.0)
+# The data EEC is nearly flat from R_L ~ 0.02 to the jet edge and has a second, large-angle
+# maximum. The global maximum then lands at R_L ~ 0.3 and says nothing about the
+# hadronisation turnover. The turnover is therefore searched for below this R_L.
+TURNOVER_MAX_RL = 0.1
+REGIONS = (("R_L < 0.01", 0.0, 0.01), ("0.01 < R_L < 0.1", 0.01, 0.1),
+           ("0.1 < R_L < 0.5", 0.1, 0.5))
 SELECTION = "corr_jet_pts > 375 & abs_jet_eta < 1.9 & quality >= 2"
 
 
 def pfcs_to_constituents(pfcs, chs: bool = True, charged_only: bool = False,
-                         pt_min: float = 0.0) -> ak.Array:
+                         pt_min: float = 0.0, drop_pids=()) -> ak.Array:
     """Convert MOD per-jet PFC arrays into a jagged Momentum4D array, one sublist per jet.
 
     MOD stores (pt, y, phi, m, pid, vertex) with *rapidity* y. The EEC here uses
     pseudorapidity, like the Pythia baseline, so eta is computed from (pt, y, m). For
     massive candidates y != eta, and mixing them would shift small-angle separations.
+
+    ``drop_pids`` removes candidates by |PDG id|, e.g. ``(130,)`` for PF neutral hadrons.
+    It is a diagnostic: it shows which PFC type carries a feature of the EEC.
     """
     import vector
 
@@ -67,6 +76,8 @@ def pfcs_to_constituents(pfcs, chs: bool = True, charged_only: bool = False,
             keep &= charged
         if pt_min > 0:
             keep &= p[:, 0] >= pt_min
+        if len(drop_pids):
+            keep &= ~np.isin(np.abs(p[:, 4]), drop_pids)
         p = p[keep]
         counts.append(len(p))
         rows.append(p)
@@ -88,6 +99,28 @@ def _is_charged(pids):
     from energyflow.utils import ischrgd
 
     return np.asarray(ischrgd(pids), dtype=bool)
+
+
+def _turnover(centres, values, rl_max=TURNOVER_MAX_RL):
+    """R_L of the EEC maximum below ``rl_max`` (the hadronisation turnover)."""
+    m = centres < rl_max
+    return float(centres[m][np.argmax(values[m])])
+
+
+def _half_rise(centres, values, rl_max=TURNOVER_MAX_RL):
+    """R_L where the small-angle side first reaches half the turnover value (log-interpolated).
+
+    A sharper scaling probe than the turnover itself when the maximum is broad.
+    """
+    m = centres < rl_max
+    c, v = centres[m], values[m]
+    i_max = int(np.argmax(v))
+    half = 0.5 * v[i_max]
+    i = int(np.argmax(v[: i_max + 1] >= half))
+    if i == 0:
+        return float(c[0])
+    x0, x1 = np.log(c[i - 1]), np.log(c[i])
+    return float(np.exp(x0 + (half - v[i - 1]) / (v[i] - v[i - 1]) * (x1 - x0)))
 
 
 def load_data(files, n_files):
@@ -123,6 +156,7 @@ def main() -> int:
     print("[2/4] building constituents (CHS) ...")
     const = pfcs_to_constituents(ds.pfcs, chs=True)
     const_ch = pfcs_to_constituents(ds.pfcs, chs=True, charged_only=True)
+    const_noh0 = pfcs_to_constituents(ds.pfcs, chs=True, drop_pids=(130,))
     print(f"      <n_const> all = {np.average(ak.to_numpy(ak.num(const)), weights=w):.1f}, "
           f"charged = {np.average(ak.to_numpy(ak.num(const_ch)), weights=w):.1f}")
 
@@ -135,6 +169,9 @@ def main() -> int:
     res_ch = eec_mod.eec_with_errors(const_ch[ak.num(const_ch) > 0],
                                      chunk_size=args.chunk_size,
                                      jet_weights=w[ak.to_numpy(ak.num(const_ch)) > 0])
+    res_noh0 = eec_mod.eec_with_errors(const_noh0[ak.num(const_noh0) > 0],
+                                       chunk_size=args.chunk_size,
+                                       jet_weights=w[ak.to_numpy(ak.num(const_noh0)) > 0])
     slices = eec_mod.eec_in_pt_bins(const, pt, PT_EDGES, chunk_size=args.chunk_size,
                                     jet_weights=w)
 
@@ -148,7 +185,8 @@ def main() -> int:
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 5.5), sharey=True)
     plotted = []
-    print("      pT slice [GeV]   jets   peak R_L   peak R_L*<pT> [GeV]   median rel. err")
+    print("      pT slice [GeV]   jets   peak R_L   turnover R_L (x<pT> GeV)"
+          "   half-rise R_L (x<pT> GeV)   median rel. err")
     for lo, hi, r in slices:
         if r is None:
             print(f"      {lo:5.0f}-{hi:<5.0f}        0   (empty)")
@@ -157,9 +195,11 @@ def main() -> int:
         mean_pt = float(np.average(pt[sel], weights=w[sel]))
         good = r.values > 0
         pk = r.centres[np.argmax(r.values)]
+        to = _turnover(r.centres, r.values)
+        hr = _half_rise(r.centres, r.values)
         rel = float(np.median(r.errors[good] / r.values[good]))
-        print(f"      {lo:5.0f}-{hi:<5.0f} {r.n_jets:8d}   {pk:8.3f}   {pk * mean_pt:12.1f}"
-              f"            {rel:6.1%}")
+        print(f"      {lo:5.0f}-{hi:<5.0f} {r.n_jets:8d}   {pk:8.3f}   {to:8.3f} ({to * mean_pt:5.1f})"
+              f"          {hr:8.4f} ({hr * mean_pt:5.2f})          {rel:6.1%}")
         v, e = r.values[good], r.errors[good]
         lo_edge, _ = plot_mod.log_band(v, e)
         plotted.append(v)
@@ -170,7 +210,8 @@ def main() -> int:
         ax.set_xscale("log")
         ax.set_yscale("log")
         ax.set_xlabel(xl)
-        ax.legend(title="CMS 2011A Open Data, jet $p_T$", fontsize=10)
+        ax.legend(title="CMS 2011A Open Data, jet $p_T$", fontsize=10, title_fontsize=11,
+                  loc="lower center")
     ax1.set_ylabel(r"$\frac{1}{\sigma}\frac{d\sigma}{d\log R_L}$")
     plot_mod.fit_log_ylim(ax1, *plotted)
     fig.tight_layout()
@@ -183,6 +224,7 @@ def main() -> int:
     tables.mkdir(parents=True, exist_ok=True)
     np.savez(tables / "eec_mod2011_data.npz", edges=res.edges, values=res.values,
              errors=res.errors, values_charged=res_ch.values, errors_charged=res_ch.errors,
+             values_no_h0=res_noh0.values, errors_no_h0=res_noh0.errors,
              n_jets=res.n_jets)
 
     print("[4/4] comparison with the Pythia 8 baseline ...")
@@ -201,6 +243,15 @@ def main() -> int:
     ax.fill_between(res.centres, lo_edge * k, hi_edge * k, color="k", alpha=0.2)
     ax.plot(res.centres, shape(res_ch.values), "o", ms=3, color="grey",
             label="CMS 2011A data (charged PFCs)")
+    ax.plot(res.centres, shape(res_noh0.values), "--", lw=1.2, color="C0",
+            label="CMS 2011A data (no neutral-hadron PFCs)")
+    print("      data shape vs all PFCs:          " + "   ".join(n for n, _, _ in REGIONS))
+    for name, v in (("charged PFCs only", res_ch.values),
+                    ("without neutral hadrons", res_noh0.values)):
+        ratio = shape(v) / d_shape
+        cells = [np.mean(ratio[(res.centres > a) & (res.centres < b) & np.isfinite(ratio)])
+                 for _, a, b in REGIONS]
+        print(f"      {name:24s}         " + "   ".join(f"{c:10.2f}" for c in cells))
     curves = [d_shape]
     py_path = pathlib.Path(args.pythia_table)
     if py_path.exists():
@@ -215,14 +266,28 @@ def main() -> int:
             with np.errstate(divide="ignore", invalid="ignore"):
                 ratio = d_shape / p_shape
             axr.plot(res.centres, ratio, "ko", ms=3)
-            for name, m in (("R_L < 0.01", res.centres < 0.01),
-                            ("0.01 < R_L < 0.1", (res.centres > 0.01) & (res.centres < 0.1)),
-                            ("0.1 < R_L < 0.5", (res.centres > 0.1) & (res.centres < 0.5))):
-                good = m & np.isfinite(ratio)
+            for name, a, b in REGIONS:
+                good = (res.centres > a) & (res.centres < b) & np.isfinite(ratio)
                 print(f"      data / Pythia shape, {name:17s}: {np.mean(ratio[good]):.2f}")
             pk_d = res.centres[np.argmax(res.values)]
             pk_p = res.centres[np.argmax(py["values"])]
             print(f"      EEC peak R_L: data {pk_d:.3f}, Pythia {pk_p:.3f}")
+            print(f"      half-rise R_L: data {_half_rise(res.centres, res.values):.4f}, "
+                  f"Pythia {_half_rise(res.centres, py['values']):.4f}")
+            if "slice_values" in py.files:
+                print("      half-rise R_L*<pT> [GeV] by slice:   data   Pythia")
+                d_by = {(lo, hi): (r, pt[(pt >= lo) & (pt < hi)]) for lo, hi, r in slices}
+                for lo, hi, mpt, v in zip(py["slice_lo"], py["slice_hi"],
+                                          py["slice_mean_pt"], py["slice_values"]):
+                    r, ptsel = d_by.get((float(lo), float(hi)), (None, None))
+                    if r is None:
+                        continue
+                    hd = _half_rise(r.centres, r.values) * float(np.mean(ptsel))
+                    hp = _half_rise(res.centres, v) * float(mpt)
+                    print(f"        {lo:5.0f}-{hi:<5.0f}                       {hd:5.2f}   {hp:5.2f}")
+            print(f"      turnover R_L (R_L < {TURNOVER_MAX_RL}): "
+                  f"data {_turnover(res.centres, res.values):.3f}, "
+                  f"Pythia {_turnover(res.centres, py['values']):.3f}")
     else:
         print(f"      no Pythia table at {py_path}; run "
               "validate_eec_pythia.py --preset mod2011 first")
