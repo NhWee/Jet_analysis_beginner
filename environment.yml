@@ -37,8 +37,9 @@ dependencies:
   - pytorch               # CPU build; for GPU see README (pytorch-cuda)
   - scikit-learn
 
-  # --- Event generator: develop/validate the EEC pipeline on truth particles ---
-  - pythia8
+  # --- Event generator: installed from PyPI below (pythia8mc), NOT conda-forge pythia8 ---
+  # conda-forge ships an older Pythia (8.312 in 2026-11), which generates different events
+  # for the same seed, so the reproduction numbers in docs/GUIDE.md would not match.
 
   # --- Notebook / tooling ---
   - pytest              # tests/ ; run: python -m pytest -q tests
@@ -52,5 +53,7 @@ dependencies:
   # --- pip-only extras ---
   - pip
   - pip:
-      - fastjet           # scikit-hep FastJet: clustering + energy correlators (awkward interface)
-      - energyflow        # EFPs, EFN/PFN, EMD, jet datasets — jets + ML + correlators
+      # versions pinned to match requirements.txt (the verified pip route)
+      - fastjet==3.5.2.0    # scikit-hep FastJet: clustering + energy correlators (awkward interface)
+      - energyflow==1.4.0   # EFPs, EFN/PFN, EMD, MOD datasets — jets + ML + correlators
+      - pythia8mc==8.318.3  # Pythia 8 event generator; `import pythia8mc`

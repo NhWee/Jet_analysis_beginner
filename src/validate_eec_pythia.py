@@ -84,7 +84,14 @@ def generate(n_events: int, seed: int, pthat_min: float, ecm: float,
         pythia.readString("PhaseSpace:bias2Selection = on")
         pythia.readString(f"PhaseSpace:bias2SelectionPow = {bias_pow}")
         pythia.readString(f"PhaseSpace:bias2SelectionRef = {bias_ref or pthat_min}")
-    pythia.init()
+    if not pythia.init():
+        # Typical cause: Pythia cannot find its XML data. The conda-forge build sets
+        # PYTHIA8DATA only when the environment is *activated*.
+        raise RuntimeError(
+            "Pythia initialisation failed (see the PYTHIA messages above). If they mention "
+            "'unmatched version numbers' or unknown keys, Pythia cannot find its data files: "
+            "activate the environment (conda activate jet-eec) or set PYTHIA8DATA to "
+            "<prefix>/share/Pythia8/xmldoc.")
 
     events, weights = [], []
     for _ in range(n_events):
