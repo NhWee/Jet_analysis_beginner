@@ -228,6 +228,13 @@ def main() -> int:
     plt.close(fig)
     print(f"      figure -> {out.relative_to(REPO)}")
 
+    tables = REPO / "results" / "tables"
+    tables.mkdir(parents=True, exist_ok=True)
+    table = tables / f"eec_pythia{suffix}.npz"
+    np.savez(table, edges=res.edges, values=res.values, errors=res.errors,
+             n_jets=res.n_jets, n_eff=res.n_eff)
+    print(f"      table  -> {table.relative_to(REPO)}")
+
     print(f"[4/{n_steps}] EEC in jet-pT slices ...")
     slices = eec_mod.eec_in_pt_bins(const_flat, jets_flat.pt, args.pt_edges,
                                     chunk_size=args.chunk_size, jet_weights=jw)
