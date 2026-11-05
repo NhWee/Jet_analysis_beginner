@@ -13,6 +13,12 @@ problem here is a bug in the pipeline, not in the data. Checks performed:
 
 Usage:  python src/validate_eec_pythia.py --n-events 2000 --seed 12345
         python src/validate_eec_pythia.py --n-events 5000 --seed 12345 --compare-hadronisation
+
+Baseline matched to the CMS 2011A MOD dataset (7 TeV, two hardest anti-kT R=0.5 jets,
+pT > 375 GeV, |eta| < 1.9), with pT-hat-biased generation so the threshold is unbiased:
+
+        python src/validate_eec_pythia.py --preset mod2011 --n-events 20000 --seed 12345 \
+            --compare-hadronisation
 """
 
 from __future__ import annotations
@@ -42,13 +48,26 @@ def _import_pythia():
     return pythia8
 
 
+def _info(pythia):
+    """``pythia.info`` in the conda bindings, ``pythia.infoPython()`` in ``pythia8mc``."""
+    return pythia.infoPython() if hasattr(pythia, "infoPython") else pythia.info
+
+
 def generate(n_events: int, seed: int, pthat_min: float, ecm: float,
-             hadronisation: bool = True) -> ak.Array:
-    """Generate dijet events with Pythia8, returning final-state particles per event.
+             hadronisation: bool = True, bias_pow: float = 0.0,
+             bias_ref: float | None = None):
+    """Generate dijet events with Pythia8.
+
+    Returns ``(particles, weights)``: final-state particles per event and one weight per
+    event, normalised to mean 1 (all 1 unless ``bias_pow > 0``).
 
     With ``hadronisation=False`` the final state is the parton shower output (quarks and
     gluons) -- unphysical as a detector input, but the cleanest way to see which part of
     the EEC is perturbative.
+
+    ``bias_pow > 0`` oversamples high pT-hat by ``(pTHat/bias_ref)**bias_pow`` and returns
+    compensating weights. This allows a low ``pthat_min`` (so jets just above a high pT
+    threshold are not lost) without spending most events far below that threshold.
     """
     pythia8 = _import_pythia()
 
@@ -61,12 +80,17 @@ def generate(n_events: int, seed: int, pthat_min: float, ecm: float,
     pythia.readString("Print:quiet = on")
     if not hadronisation:
         pythia.readString("HadronLevel:all = off")
+    if bias_pow > 0:
+        pythia.readString("PhaseSpace:bias2Selection = on")
+        pythia.readString(f"PhaseSpace:bias2SelectionPow = {bias_pow}")
+        pythia.readString(f"PhaseSpace:bias2SelectionRef = {bias_ref or pthat_min}")
     pythia.init()
 
-    events = []
+    events, weights = [], []
     for _ in range(n_events):
         if not pythia.next():
             continue
+        weights.append(_info(pythia).weight())
         pt, eta, phi, m = [], [], [], []
         for p in pythia.event:
             # final-state, visible, within tracker-like acceptance
@@ -82,15 +106,45 @@ def generate(n_events: int, seed: int, pthat_min: float, ecm: float,
         events.append({"pt": pt, "eta": eta, "phi": phi, "mass": m})
 
     arr = ak.Array(events)
-    return jets_mod.as_particles(arr.pt, arr.eta, arr.phi, mass=arr.mass)
+    w = np.asarray(weights, dtype=float)
+    return jets_mod.as_particles(arr.pt, arr.eta, arr.phi, mass=arr.mass), w / w.mean()
 
 
 PT_EDGES = (100.0, 150.0, 200.0, 300.0, 500.0)
 
+# Settings matched to the CMS 2011A MOD HDF5 dataset (zenodo 3340205): two hardest anti-kT
+# R=0.5 jets per event, pT > 375 GeV (where HLT_Jet300 is fully efficient), |eta| < 1.9.
+# pTHatMin=150 with bias: a direct check found 3.3% of pT>375 jets come from pTHat<250
+# and 8.5% from pTHat<300 at R=0.5, so a cut near the threshold would bias the sample.
+PRESETS = {
+    "mod2011": dict(ecm=7000.0, R=0.5, jet_pt_min=375.0, max_abs_eta=1.9, leading=2,
+                    pthat_min=150.0, bias_pow=4.0, bias_ref=150.0,
+                    pt_edges=(375.0, 450.0, 550.0, 700.0, 1000.0)),
+}
 
-def jets_and_constituents(particles, cfg):
-    jets, constituents = jets_mod.cluster(particles, cfg)
-    return ak.flatten(jets), ak.flatten(constituents, axis=1)
+
+def jets_and_constituents(particles, cfg, event_weights=None, leading=0):
+    """Cluster, optionally keep the ``leading`` hardest jets per event before cuts.
+
+    Returns flat (jets, constituents, jet_weights), one entry per selected jet.
+    """
+    if leading:
+        loose = jets_mod.JetConfig(algorithm=cfg.algorithm, R=cfg.R,
+                                   min_pt=min(20.0, cfg.min_pt), max_abs_eta=99.0)
+        jets, const = jets_mod.cluster(particles, loose)
+        jets, const = jets_mod.leading(jets, const, leading)
+        keep = (jets.pt > cfg.min_pt) & (abs(jets.eta) < cfg.max_abs_eta)
+        jets, const = jets[keep], const[keep]
+    else:
+        jets, const = jets_mod.cluster(particles, cfg)
+    if event_weights is None:
+        event_weights = np.ones(len(jets))
+    jw = np.repeat(np.asarray(event_weights, dtype=float), ak.to_numpy(ak.num(jets)))
+    return ak.flatten(jets), ak.flatten(const, axis=1), jw
+
+
+def wmean(x, w):
+    return float(np.average(np.asarray(ak.to_numpy(x), dtype=float), weights=w))
 
 
 def main() -> int:
@@ -106,32 +160,53 @@ def main() -> int:
                     help="jets per EEC block (bounds memory)")
     ap.add_argument("--compare-hadronisation", action="store_true",
                     help="also generate with HadronLevel:all = off and overlay")
+    ap.add_argument("--max-abs-eta", type=float, default=2.0)
+    ap.add_argument("--leading", type=int, default=0,
+                    help="keep only the N hardest jets per event, before cuts (0 = all)")
+    ap.add_argument("--bias-pow", type=float, default=0.0,
+                    help="pT-hat bias power for weighted generation (0 = unweighted)")
+    ap.add_argument("--bias-ref", type=float, default=None, help="GeV")
+    ap.add_argument("--pt-edges", type=float, nargs="+", default=list(PT_EDGES))
+    ap.add_argument("--tag", default="", help="suffix for output figure names")
+    ap.add_argument("--preset", choices=sorted(PRESETS),
+                    help="set all of the above to a named configuration")
     args = ap.parse_args()
+    if args.preset:
+        for k, v in PRESETS[args.preset].items():
+            setattr(args, k, v)
+        args.tag = args.tag or args.preset
+    suffix = f"_{args.tag}" if args.tag else ""
+    print(f"      config: ecm={args.ecm:.0f} R={args.R} jet pT>{args.jet_pt_min:.0f} "
+          f"|eta|<{args.max_abs_eta} leading={args.leading or 'all'} "
+          f"pTHatMin={args.pthat_min:.0f} bias_pow={args.bias_pow}")
 
     np.random.seed(args.seed)
     n_steps = 5 if args.compare_hadronisation else 4
 
     print(f"[1/{n_steps}] generating {args.n_events} Pythia events (seed={args.seed}) ...")
-    particles = generate(args.n_events, args.seed, args.pthat_min, args.ecm)
+    gen_kw = dict(bias_pow=args.bias_pow, bias_ref=args.bias_ref)
+    particles, ev_w = generate(args.n_events, args.seed, args.pthat_min, args.ecm, **gen_kw)
     print(f"      {len(particles)} events, "
           f"<multiplicity> = {ak.mean(ak.num(particles)):.1f}")
 
     print(f"[2/{n_steps}] clustering jets ...")
-    cfg = jets_mod.JetConfig(algorithm="antikt", R=args.R, min_pt=args.jet_pt_min)
-    jets_flat, const_flat = jets_and_constituents(particles, cfg)
+    cfg = jets_mod.JetConfig(algorithm="antikt", R=args.R, min_pt=args.jet_pt_min,
+                             max_abs_eta=args.max_abs_eta)
+    jets_flat, const_flat, jw = jets_and_constituents(particles, cfg, ev_w, args.leading)
     n_jets = len(jets_flat)
     if n_jets == 0:
         print("      FAIL: no jets found — check pT cuts / input units (GeV expected)")
         return 1
-    print(f"      {n_jets} jets, <pT> = {ak.mean(jets_flat.pt):.1f} GeV, "
-          f"<n_const> = {ak.mean(ak.num(const_flat)):.1f}")
+    n_eff = jw.sum() ** 2 / (jw**2).sum()
+    print(f"      {n_jets} jets (effective {n_eff:.0f}), <pT> = {wmean(jets_flat.pt, jw):.1f} GeV, "
+          f"<n_const> = {wmean(ak.num(const_flat), jw):.1f}")
 
     print(f"[3/{n_steps}] computing EEC ...")
     norm = eec_mod.normalisation_check(const_flat, chunk_size=args.chunk_size)
     print(f"      normalisation = {norm:.6f} (expect 1.0)")
     ok = abs(norm - 1.0) < 1e-6
 
-    res = eec_mod.eec_with_errors(const_flat, chunk_size=args.chunk_size)
+    res = eec_mod.eec_with_errors(const_flat, chunk_size=args.chunk_size, jet_weights=jw)
     peak = res.centres[np.argmax(res.values)]
     print(f"      EEC peak at R_L = {peak:.3f}")
 
@@ -148,27 +223,27 @@ def main() -> int:
     ax.fill_between(res.centres, *plot_mod.log_band(res.values, res.errors), alpha=0.3)
     plot_mod.fit_log_ylim(ax, res.values)
     ax.set_title(f"EEC validation, $p_T^{{jet}}>{args.jet_pt_min:.0f}$ GeV")
-    out = outdir / "eec_pythia_validation.png"
+    out = outdir / f"eec_pythia_validation{suffix}.png"
     plot_mod.save(fig, str(out))
     plt.close(fig)
     print(f"      figure -> {out.relative_to(REPO)}")
 
     print(f"[4/{n_steps}] EEC in jet-pT slices ...")
-    slices = eec_mod.eec_in_pt_bins(const_flat, jets_flat.pt, PT_EDGES,
-                                    chunk_size=args.chunk_size)
+    slices = eec_mod.eec_in_pt_bins(const_flat, jets_flat.pt, args.pt_edges,
+                                    chunk_size=args.chunk_size, jet_weights=jw)
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 5.5), sharey=True)
     plotted = []
-    print("      pT slice [GeV]   jets   peak R_L   peak R_L*<pT> [GeV]   median rel. err")
+    print("      pT slice [GeV]   jets  (eff)   peak R_L   peak R_L*<pT> [GeV]   median rel. err")
     for lo, hi, r in slices:
         if r is None:
             print(f"      {lo:5.0f}-{hi:<5.0f}         0   (empty)")
             continue
         sel = (ak.to_numpy(jets_flat.pt) >= lo) & (ak.to_numpy(jets_flat.pt) < hi)
-        mean_pt = float(np.mean(ak.to_numpy(jets_flat.pt)[sel]))
+        mean_pt = wmean(ak.to_numpy(jets_flat.pt)[sel], jw[sel])
         pk = r.centres[np.argmax(r.values)]
         good = r.values > 0
         rel = float(np.median(r.errors[good] / r.values[good]))
-        print(f"      {lo:5.0f}-{hi:<5.0f} {r.n_jets:9d}   {pk:8.3f}   {pk * mean_pt:12.1f}"
+        print(f"      {lo:5.0f}-{hi:<5.0f} {r.n_jets:7d} {r.n_eff:6.0f}   {pk:8.3f}   {pk * mean_pt:12.1f}"
               f"            {rel:6.1%}")
         lab = f"{lo:.0f}-{hi:.0f} GeV"
         v, e = r.values[good], r.errors[good]
@@ -184,19 +259,19 @@ def main() -> int:
     ax1.set_ylabel(r"$\frac{1}{\sigma}\frac{d\sigma}{d\log R_L}$")
     plot_mod.fit_log_ylim(ax1, *plotted)
     fig.tight_layout()
-    out = outdir / "eec_pythia_pt_slices.png"
+    out = outdir / f"eec_pythia_pt_slices{suffix}.png"
     plot_mod.save(fig, str(out))
     plt.close(fig)
     print(f"      figure -> {out.relative_to(REPO)}")
 
     if args.compare_hadronisation:
         print(f"[5/{n_steps}] same seed, hadronisation off ...")
-        partons = generate(args.n_events, args.seed, args.pthat_min, args.ecm,
-                           hadronisation=False)
-        pj, pc = jets_and_constituents(partons, cfg)
-        pres = eec_mod.eec_with_errors(pc, chunk_size=args.chunk_size)
+        partons, pev_w = generate(args.n_events, args.seed, args.pthat_min, args.ecm,
+                                  hadronisation=False, **gen_kw)
+        pj, pc, pjw = jets_and_constituents(partons, cfg, pev_w, args.leading)
+        pres = eec_mod.eec_with_errors(pc, chunk_size=args.chunk_size, jet_weights=pjw)
         ppeak = pres.centres[np.argmax(pres.values)]
-        print(f"      {len(pj)} parton-level jets, <n_const> = {ak.mean(ak.num(pc)):.1f}, "
+        print(f"      {len(pj)} parton-level jets, <n_const> = {wmean(ak.num(pc), pjw):.1f}, "
               f"EEC peak at R_L = {ppeak:.3f}")
         # Compare SHAPES. Each EEC sums to 1 including self-pairs at dR = 0, which lie
         # outside the bins; parton-level jets have few hard constituents, so their
@@ -234,7 +309,7 @@ def main() -> int:
         axr.set_ylim(0, 2)
         axr.set_xlabel(r"$R_L$")
         axr.set_ylabel("parton / hadron")
-        out = outdir / "eec_pythia_hadronisation.png"
+        out = outdir / f"eec_pythia_hadronisation{suffix}.png"
         plot_mod.save(fig, str(out))
         plt.close(fig)
         print(f"      figure -> {out.relative_to(REPO)}")

@@ -107,3 +107,13 @@ def cluster(particles: ak.Array, config: JetConfig | None = None):
     # Acceptance cut, applied identically to jets and their constituents
     keep = abs(jets.eta) < config.max_abs_eta
     return jets[keep], constituents[keep]
+
+
+def leading(jets: ak.Array, constituents: ak.Array, n: int):
+    """Keep the ``n`` highest-pT jets per event (and their constituents).
+
+    Use this *before* kinematic cuts to reproduce a "two hardest jets in the event, then
+    pT/eta cuts" selection, as in the CMS 2011A MOD dataset.
+    """
+    order = ak.argsort(jets.pt, axis=1, ascending=False)[:, :n]
+    return jets[order], constituents[order]

@@ -66,7 +66,8 @@ class EECResult:
     """A binned EEC with its statistical uncertainty.
 
     ``values`` and ``errors`` are ``dSigma/dlog(R_L)`` per jet; ``errors`` is the standard
-    error of the mean over jets. ``n_jets`` is the number of jets averaged over.
+    error of the mean over jets. ``n_jets`` is the number of jets averaged over and ``n_eff``
+    the effective number when jets are weighted.
     """
 
     centres: np.ndarray
@@ -74,6 +75,7 @@ class EECResult:
     values: np.ndarray
     errors: np.ndarray
     n_jets: int
+    n_eff: float = float("nan")  # (sum w)^2 / sum w^2; equals n_jets when unweighted
 
 
 def _iter_chunks(n: int, chunk_size: int | None):
@@ -103,6 +105,7 @@ def eec_with_errors(
     norm: str = "sum_pt",
     jet_pt=None,
     chunk_size: int | None = None,
+    jet_weights=None,
 ) -> EECResult:
     """Compute the jet-averaged two-point EEC together with its statistical error.
 
@@ -123,6 +126,10 @@ def eec_with_errors(
     chunk_size : int, optional
         Process this many jets at a time. All pairs of a block are held in memory at
         once (O(sum n_i^2)), so set this for large samples. ``None`` = one block.
+    jet_weights : array-like, optional
+        One weight per jet, e.g. the event weight of a pT-hat-biased generator sample.
+        The EEC is then the weighted mean of the per-jet histograms, and the error is the
+        corresponding weighted standard error. ``None`` = unweighted (exactly as before).
     """
     if bins is None:
         bins = np.logspace(-3, 0, 51)
@@ -136,6 +143,14 @@ def eec_with_errors(
         jet_pt = np.asarray(ak.to_numpy(jet_pt), dtype=float)
         if len(jet_pt) != n_jets:
             raise ValueError("jet_pt must have one entry per jet")
+    if jet_weights is not None:
+        jet_weights = np.asarray(ak.to_numpy(jet_weights), dtype=float)
+        if len(jet_weights) != n_jets:
+            raise ValueError("jet_weights must have one entry per jet")
+        sw = sw2 = 0.0
+        s_wh = np.zeros(nb)    # sum w h
+        s_w2h = np.zeros(nb)   # sum w^2 h
+        s_w2h2 = np.zeros(nb)  # sum w^2 h^2
 
     total = np.zeros(nb)     # sum over jets of per-jet bin content
     total_sq = np.zeros(nb)  # sum over jets of (per-jet bin content)^2
@@ -162,8 +177,28 @@ def eec_with_errors(
         per_jet = np.bincount(jet_idx[ok] * nb + b[ok], weights=w_flat[ok],
                               minlength=(hi - lo) * nb).reshape(hi - lo, nb)
         total_sq += (per_jet**2).sum(axis=0)
+        if jet_weights is not None:
+            wj = jet_weights[lo:hi]
+            sw += wj.sum()
+            sw2 += (wj**2).sum()
+            s_wh += wj @ per_jet
+            s_w2h += (wj**2) @ per_jet
+            s_w2h2 += (wj**2) @ per_jet**2
 
     dlog = np.diff(np.log(edges))
+    centres = np.sqrt(edges[:-1] * edges[1:])
+    if jet_weights is not None:
+        if sw <= 0:
+            raise ValueError("sum of jet_weights must be positive")
+        m = s_wh / sw
+        # weighted SEM: sqrt(sum w_j^2 (h_j - m)^2) / sum w_j, with the small-sample
+        # factor n_eff/(n_eff-1) so that unit weights reproduce the unweighted error
+        n_eff = sw**2 / sw2
+        var_m = np.clip(s_w2h2 - 2 * m * s_w2h + m**2 * sw2, 0, None) / sw**2
+        var_m = var_m * n_eff / (n_eff - 1) if n_eff > 1 else np.full(nb, np.nan)
+        return EECResult(centres=centres, edges=edges, values=m / dlog,
+                         errors=np.sqrt(var_m) / dlog, n_jets=n_jets,
+                         n_eff=sw**2 / sw2)
     mean = total / n_jets
     if n_jets > 1:
         var = np.clip(total_sq / n_jets - mean**2, 0, None) * n_jets / (n_jets - 1)
@@ -177,6 +212,7 @@ def eec_with_errors(
         values=total / dlog / n_jets,
         errors=sem / dlog,
         n_jets=n_jets,
+        n_eff=float(n_jets),
     )
 
 
@@ -187,6 +223,7 @@ def eec(
     norm: str = "sum_pt",
     jet_pt=None,
     chunk_size: int | None = None,
+    jet_weights=None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Jet-averaged two-point EEC as ``(centres, values)``.
 
@@ -195,7 +232,8 @@ def eec(
     statistical uncertainty is needed; arguments are the same.
     """
     r = eec_with_errors(constituents, bins=bins, include_self=include_self,
-                        norm=norm, jet_pt=jet_pt, chunk_size=chunk_size)
+                        norm=norm, jet_pt=jet_pt, chunk_size=chunk_size,
+                        jet_weights=jet_weights)
     return r.centres, r.values
 
 
@@ -221,10 +259,13 @@ def eec_in_pt_bins(
         if not sel.any():
             out.append((float(lo), float(hi), None))
             continue
-        if kwargs.get("norm") == "jet_pt":
-            kwargs = {**kwargs, "jet_pt": jet_pt[sel]}
+        kw = dict(kwargs)
+        if kw.get("norm") == "jet_pt":
+            kw["jet_pt"] = jet_pt[sel]
+        if kw.get("jet_weights") is not None:
+            kw["jet_weights"] = np.asarray(ak.to_numpy(kw["jet_weights"]), dtype=float)[sel]
         out.append((float(lo), float(hi),
-                    eec_with_errors(constituents[sel], bins=bins, **kwargs)))
+                    eec_with_errors(constituents[sel], bins=bins, **kw)))
     return out
 
 

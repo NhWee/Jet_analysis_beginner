@@ -46,3 +46,13 @@ def test_unknown_algorithm():
 def test_as_particles_needs_mass_or_energy():
     with pytest.raises(ValueError):
         jets_mod.as_particles([[1.0]], [[0.0]], [[0.0]])
+
+
+def test_leading_keeps_hardest(toy_particles):
+    cfg = jets_mod.JetConfig(min_pt=20, max_abs_eta=10)
+    jets, const = jets_mod.cluster(toy_particles, cfg)
+    lj, lc = jets_mod.leading(jets, const, 2)
+    assert ak.all(ak.num(lj) <= 2)
+    assert ak.all(ak.num(lj) == ak.num(lc))
+    top = ak.sort(jets.pt, axis=1, ascending=False)[:, :2]
+    np.testing.assert_allclose(ak.to_numpy(ak.flatten(lj.pt)), ak.to_numpy(ak.flatten(top)))

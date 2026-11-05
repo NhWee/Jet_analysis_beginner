@@ -155,3 +155,39 @@ def test_empty_pt_bin_is_none(toy_jets):
     jets, const = toy_jets
     res = eec.eec_in_pt_bins(const, jets.pt, [5000, 6000])
     assert res[0][2] is None
+
+
+# ---- weighted jets -------------------------------------------------------------
+
+def test_unit_weights_match_unweighted(toy_jets):
+    _, const = toy_jets
+    a = eec.eec_with_errors(const)
+    b = eec.eec_with_errors(const, jet_weights=np.ones(len(const)), chunk_size=17)
+    np.testing.assert_allclose(b.values, a.values, rtol=1e-9, atol=1e-13)
+    np.testing.assert_allclose(b.errors, a.errors, rtol=1e-9, atol=1e-13)
+    assert b.n_eff == pytest.approx(len(const))
+
+
+def test_integer_weights_equal_duplication():
+    j1 = [(3, 0.0, 0.0), (1, 0.1, 0.0)]
+    j2 = [(3, 0.0, 0.0), (1, 0.5, 0.0)]
+    edges = np.array([0.05, 0.2, 0.8])
+    w = eec.eec_with_errors(jets_from_lists(j1, j2), bins=edges, jet_weights=[3, 1])
+    d = eec.eec_with_errors(jets_from_lists(j1, j1, j1, j2), bins=edges)
+    np.testing.assert_allclose(w.values, d.values)
+    assert w.n_eff == pytest.approx(16 / 10)
+
+
+def test_weights_sliced_in_pt_bins(toy_jets):
+    jets, const = toy_jets
+    w = np.ones(len(const))
+    res = eec.eec_in_pt_bins(const, jets.pt, [100, 200, 2000], jet_weights=w)
+    ref = eec.eec_in_pt_bins(const, jets.pt, [100, 200, 2000])
+    for (_, _, a), (_, _, b) in zip(res, ref):
+        np.testing.assert_allclose(a.values, b.values, rtol=1e-9, atol=1e-13)
+
+
+def test_bad_weights_rejected(toy_jets):
+    _, const = toy_jets
+    with pytest.raises(ValueError, match="jet_weights"):
+        eec.eec_with_errors(const, jet_weights=[1.0])

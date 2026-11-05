@@ -61,6 +61,7 @@ python -m pytest -q tests
 # 1. is the pipeline correct?  -- run this FIRST, before any open data
 python src/validate_eec_pythia.py --n-events 2000 --seed 12345
 #    add --compare-hadronisation for the parton- vs hadron-level comparison
+#    --preset mod2011 matches the CMS 2011A MOD dataset (7 TeV, R=0.5, pT>375 GeV)
 
 # 2. which data tier do I actually need?
 python src/tier_demo.py --n-events 400 --seed 12345
