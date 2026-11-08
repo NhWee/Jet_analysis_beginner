@@ -1,0 +1,24 @@
+# Runs the test suite on every push and pull request, in the pinned environment that
+# produced the documented numbers (requirements-lock.txt). A failure in
+# tests/test_tier_numbers.py means a documented number moved: fix the bug, or
+# regenerate the docs and figures together with the code.
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements-lock.txt
+      - name: Install the pinned environment
+        run: pip install -r requirements-lock.txt
+      - name: Unit, closure, documented-number and notebook tests
+        run: pytest -q
