@@ -44,6 +44,7 @@ dependencies:
   - jupyterlab
   - ipykernel
   - git
+  - pytest                # `pytest` runs tests/ (unit, closure and documented-number tests)
 
   # --- Optional (uncomment if you want ROOT-native workflows) ---
   # - root                # PyROOT / RDataFrame; installs cleanly from conda-forge
@@ -51,5 +52,6 @@ dependencies:
   # --- pip-only extras ---
   - pip
   - pip:
-      - fastjet           # scikit-hep FastJet: clustering + energy correlators (awkward interface)
+      - fastjet>=3.5.1.5  # scikit-hep FastJet (awkward interface); <= 3.5.1.4 silently
+                          # mis-clusters non-contiguous input -- see README "Known trap"
       - energyflow        # EFPs, EFN/PFN, EMD, jet datasets — jets + ML + correlators
