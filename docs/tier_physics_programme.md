@@ -131,9 +131,11 @@ constituents. This is where jet ML actually lives, and it needs exactly what Min
 
 ### What it cannot do
 
-Reduced numerical precision and pT thresholds on stored candidates limit very-low-pT and
-very-small-angle work. Full track parameters, hits, and detailed reconstruction internals are
-gone — so you inherit CMS's reconstruction and cannot study or re-derive it.
+Kinematics are stored at 16-bit precision (η and φ in steps of ~10⁻⁴), which reshuffles only
+the very smallest angles — in the toy, single EEC bins below R_L ≈ 3×10⁻³
+([`tier_analyses_results.md`](tier_analyses_results.md)). Full track parameters, hits, and
+detailed reconstruction internals are gone — so you inherit CMS's reconstruction and cannot
+study or re-derive it.
 
 ---
 
@@ -257,4 +259,5 @@ your clustering, selection, and corrections reproduce a published jet spectrum.
 - [cms-jet/PFNano](https://github.com/cms-jet/PFNano)
 - Petrucciani, Rizzi, Vuosalo, *Mini-AOD: A New Analysis Data Format for CMS*, [arXiv:1702.04685](https://arxiv.org/abs/1702.04685)
 - CMS, *Measurement of energy correlators inside jets and determination of αS(mZ)*, [arXiv:2402.13864](https://arxiv.org/abs/2402.13864) · [HEPData](https://www.hepdata.net/record/ins2760466)
-- Larkoski, Moult, Neill, *Energy correlation functions for jet substructure*, [arXiv:1305.0007](https://arxiv.org/abs/1305.0007)
+- Komiske, Moult, Thaler, Zhu, *Analyzing N-point energy correlators inside jets with CMS Open Data*, Phys. Rev. Lett. 130 (2023) 051901, [arXiv:2201.07800](https://arxiv.org/abs/2201.07800) — the EEC as computed here
+- Larkoski, Salam, Thaler, *Energy correlation functions for jet substructure*, JHEP 06 (2013) 108, [arXiv:1305.0007](https://arxiv.org/abs/1305.0007) — the related $e_2$/$C_2$ discriminants, not the $R_L$ distribution

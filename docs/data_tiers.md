@@ -22,7 +22,7 @@ tries five analyses on each and reports what survives.
 | **RAW** | detector signals | ~1 MB | collaboration only |
 | **RECO** | full reconstruction, all hits & track detail | ~3 MB | effectively unused |
 | **AOD** | physics objects **+ all PFCandidates** | ~200 kB | CMSSW (Docker image) |
-| **MiniAOD** | AOD slimmed; PFCandidates partly kept | ~40 kB | CMSSW |
+| **MiniAOD** | AOD slimmed; **all** PFCandidates kept, at 16-bit precision | ~40 kB | CMSSW |
 | **NanoAOD** | flat ROOT ntuple, jet kinematics | ~1–2 kB | **uproot, directly** |
 | **PFNano / JMENano** | NanoAOD **+ in-jet PFCandidates** | ~10–20 kB | **uproot, directly** |
 
@@ -100,8 +100,10 @@ tier.
    smaller than AOD. Accept the fixed jet radius.
    ⚠️ **But PFNano is not a released Open Data format** — it is a CMSSW framework you run
    yourself over MiniAOD to produce those files. Budget one CMSSW Docker pass to get there.
-3. **AOD only if** you need a non-standard R, a different algorithm, custom grooming, or
-   track-level detail that MiniAOD's compressed candidates drop.
+3. **MiniAOD** (or AOD) if you need a non-standard R, a different algorithm or custom
+   grooming — both keep every candidate. The demo's "AOD" column stands for that whole-event
+   access. **AOD only if** you need track-level detail that MiniAOD's packed candidates drop,
+   such as your own tracking systematics.
 
 See [`tier_physics_programme.md`](tier_physics_programme.md) for what each tier actually lets
 you measure, and the recommended order of attack.
@@ -135,4 +137,5 @@ linking candidates back to jets.
 - [CMS Open Data — analysis with Docker](https://opendata.cern.ch/docs/cms-guide-docker)
 - [ATLAS Open Data — notebooks](https://opendata.atlas.cern/docs/notebooks/intro)
 - [scikit-hep/fastjet](https://github.com/scikit-hep/fastjet)
-- Larkoski, Moult, Neill, *Energy correlation functions for jet substructure*, JHEP 06 (2013) 108, [arXiv:1305.0007](https://arxiv.org/abs/1305.0007)
+- Komiske, Moult, Thaler, Zhu, *Analyzing N-point energy correlators inside jets with CMS Open Data*, Phys. Rev. Lett. 130 (2023) 051901, [arXiv:2201.07800](https://arxiv.org/abs/2201.07800) — the EEC as computed here
+- Larkoski, Salam, Thaler, *Energy correlation functions for jet substructure*, JHEP 06 (2013) 108, [arXiv:1305.0007](https://arxiv.org/abs/1305.0007) — the related $e_2$/$C_2$ discriminants, not the $R_L$ distribution
