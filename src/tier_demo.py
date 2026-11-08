@@ -13,7 +13,7 @@ information loss concrete: every tier stores the *same events*, just less of the
 Note the AOD file stores *no jets*: at AOD level you run the clustering yourself, which
 is exactly why it is the only tier where you may change R or the algorithm.
 
-Usage:  python src/tier_demo.py --n-events 300 --seed 12345
+Usage:  python src/tier_demo.py --n-events 400 --seed 12345
 Output: data/interim/tier_demo/{nanoaod,pfnano,aod}_like.root
         results/figures/tier_capability.png
 """
@@ -21,6 +21,7 @@ Output: data/interim/tier_demo/{nanoaod,pfnano,aod}_like.root
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import pathlib
 import sys
 
@@ -32,12 +33,16 @@ import vector
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 vector.register_awkward()
 
+from jeteec import jets as jets_mod  # noqa: E402
+
 REPO = pathlib.Path(__file__).resolve().parents[1]
 OUTDIR = REPO / "data" / "interim" / "tier_demo"
 FIGDIR = REPO / "results" / "figures"
 
 R_NOMINAL = 0.4          # the radius the "experiment" reconstructed jets with
 JET_PT_MIN = 100.0       # GeV
+NOMINAL = jets_mod.JetConfig(algorithm="antikt", R=R_NOMINAL, min_pt=JET_PT_MIN,
+                             max_abs_eta=2.0)
 
 
 # --------------------------------------------------------------------------------------
@@ -95,16 +100,14 @@ def make_truth_events(n_events: int, rng: np.random.Generator) -> ak.Array:
 # --------------------------------------------------------------------------------------
 # 2. Write the three tiers
 # --------------------------------------------------------------------------------------
-def cluster_nominal(particles: ak.Array):
-    """Reconstruct jets the way the experiment would have, at the nominal radius."""
-    import fastjet
+def cluster_nominal(particles: ak.Array, R: float = R_NOMINAL):
+    """Reconstruct jets the way the experiment would have: pT-ordered, |eta| < 2.
 
-    jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, R_NOMINAL)
-    seq = fastjet.ClusterSequence(particles, jetdef)
-    jets = seq.inclusive_jets(min_pt=JET_PT_MIN)
-    const = seq.constituents(min_pt=JET_PT_MIN)
-    keep = abs(jets.eta) < 2.0
-    return jets[keep], const[keep]
+    Goes through :func:`jeteec.jets.cluster`, which guards against the fastjet layout
+    trap. ``R`` is only changed by the reclustering probe, which must keep the same
+    acceptance cut so that the two radii are compared on equal terms.
+    """
+    return jets_mod.cluster(particles, dataclasses.replace(NOMINAL, R=R))
 
 
 def write_tiers(particles: ak.Array) -> dict[str, pathlib.Path]:
@@ -250,11 +253,8 @@ def probe(tier: str, data: dict) -> dict[str, tuple[bool, str]]:
 
     # (e) recluster at a different radius / groom — needs the full event
     if parts is not None:
-        j04, _ = cluster_nominal(parts)  # nominal, for comparison
-        import fastjet
-        seq = fastjet.ClusterSequence(
-            parts, fastjet.JetDefinition(fastjet.antikt_algorithm, 0.8))
-        j08 = seq.inclusive_jets(min_pt=JET_PT_MIN)
+        j04, _ = cluster_nominal(parts)          # nominal, for comparison
+        j08, _ = cluster_nominal(parts, R=0.8)   # same pT and |eta| cuts
         # a wider cone sweeps up more soft radiation, so <pT> rises
         res["Recluster at R=0.8"] = (
             True,
@@ -274,7 +274,7 @@ def probe(tier: str, data: dict) -> dict[str, tuple[bool, str]]:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--n-events", type=int, default=300)
+    ap.add_argument("--n-events", type=int, default=400)
     ap.add_argument("--seed", type=int, default=12345)
     args = ap.parse_args()
 
