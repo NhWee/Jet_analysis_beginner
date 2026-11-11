@@ -5,6 +5,7 @@ from __future__ import annotations
 import matplotlib.pyplot as plt
 import mplhep as hep
 import numpy as np
+from matplotlib.ticker import FixedLocator, NullFormatter, ScalarFormatter
 
 
 def use_style(experiment: str = "ATLAS") -> None:
@@ -41,6 +42,17 @@ def plot_eec(
     if label:
         ax.legend()
     return ax
+
+
+def log_pt_axis(ax: "plt.Axes", ticks=(100, 200, 300, 500, 1000)) -> None:
+    """Log-scale x axis with plain-number ticks.
+
+    Over a single decade matplotlib labels the minor ticks too, and the labels collide.
+    """
+    ax.set_xscale("log")
+    ax.xaxis.set_major_locator(FixedLocator(ticks))
+    ax.xaxis.set_major_formatter(ScalarFormatter())
+    ax.xaxis.set_minor_formatter(NullFormatter())
 
 
 def save(fig: "plt.Figure", path: str, dpi: int = 300) -> None:

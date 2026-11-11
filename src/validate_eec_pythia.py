@@ -4,8 +4,12 @@ Run this BEFORE touching Open Data. With generator truth you control everything,
 problem here is a bug in the pipeline, not in the data. Checks performed:
 
   1. jets are found and have sensible pT / multiplicity
-  2. EEC weights sum to ~1 per jet (normalisation check)
-  3. the EEC distribution has the expected shape, saved to results/figures/
+  2. every jet equals the four-vector sum of its constituents (closure)
+  3. EEC weights sum to ~1 per jet (normalisation check)
+  4. the EEC distribution has the expected shape, saved to results/figures/
+
+Pythia comes either from conda-forge (``pythia8`` module, as in environment.yml) or from
+the official PyPI wheel (``pip install pythia8mc``); both are accepted.
 
 Usage:  python src/validate_eec_pythia.py --n-events 2000 --seed 12345
 """
@@ -21,16 +25,24 @@ import numpy as np
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 
-from jeteec import eec as eec_mod
-from jeteec import jets as jets_mod
-from jeteec import plot as plot_mod
+import matplotlib  # noqa: E402
+
+matplotlib.use("Agg")
+
+from jeteec import eec as eec_mod  # noqa: E402
+from jeteec import jets as jets_mod  # noqa: E402
+from jeteec import plot as plot_mod  # noqa: E402
+from jeteec.kinematics import sum_p4  # noqa: E402
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
 
 
 def generate(n_events: int, seed: int, pthat_min: float, ecm: float) -> ak.Array:
     """Generate dijet events with Pythia8, returning final-state particles per event."""
-    import pythia8
+    try:
+        import pythia8                       # conda-forge build
+    except ImportError:
+        import pythia8mc as pythia8          # official PyPI wheel
 
     pythia = pythia8.Pythia("", False)
     pythia.readString("HardQCD:all = on")
@@ -92,10 +104,16 @@ def main() -> int:
         print("      FAIL: no jets found — check pT cuts / input units (GeV expected)")
         return 1
 
+    total = sum_p4(const_flat)
+    closure = float(ak.max(abs(total.pt - jets_flat.pt) / jets_flat.pt))
+    print(f"      closure: max |sum(constituents) - jet| / jet pT = {closure:.1e} "
+          f"(expect ~1e-15)")
+    closure_ok = closure < 1e-9
+
     print("[3/3] computing EEC ...")
     norm = eec_mod.normalisation_check(const_flat)
     print(f"      normalisation = {norm:.6f} (expect 1.0)")
-    ok = abs(norm - 1.0) < 1e-6
+    norm_ok = abs(norm - 1.0) < 1e-6
 
     centres, values = eec_mod.eec(const_flat)
 
@@ -111,8 +129,10 @@ def main() -> int:
     plot_mod.save(fig, str(out))
     print(f"      figure -> {out.relative_to(REPO)}")
 
-    print("\nRESULT:", "PASS" if ok else "FAIL (normalisation off)")
-    return 0 if ok else 1
+    failures = [name for name, good in (("closure", closure_ok),
+                                        ("normalisation", norm_ok)) if not good]
+    print("\nRESULT:", "PASS" if not failures else f"FAIL ({', '.join(failures)} off)")
+    return 0 if not failures else 1
 
 
 if __name__ == "__main__":

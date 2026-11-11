@@ -36,23 +36,34 @@ python src/tier_analyses.py --n-events 2000 --seed 12345
 
 | Tier | What it permits | Headline number |
 |---|---|---|
-| NanoAOD -- jet four-vectors only | inclusive spectrum, dijet $\chi$, $R_{32}$ | spectrum index $n = 4.85$ (generated 5.0) |
+| NanoAOD -- jet four-vectors only | inclusive spectrum, dijet $\chi$, $R_{32}$ | spectrum index $n = 5.04 \pm 0.07$ (generated 5.0) |
 | PFNano -- + in-jet constituents | $D(z)$, multiplicity, girth, $p_TD$, **EEC** | EEC normalisation $= 1.000000$ |
-| MiniAOD -- + all candidates | radius scan, trimming, charged-only | trimming removes $18.8\%$ of jet mass |
-| AOD -- + pre-reconstruction access | tracking systematics | EEC shifts $\lesssim 2\%$ |
+| MiniAOD -- + all candidates | radius scan, trimming, charged-only | trimming removes $23.1\%$ of jet mass |
+| AOD -- + pre-reconstruction access | tracking systematics | no shift resolved in 2000 events ($\le 0.7\sigma$) |
+
+Every headline number carries its statistical uncertainty, and where the toy generator
+knows the answer it is printed alongside (a closure test: the spectrum and $R_{32}$ agree
+with the generator's own jet axes).
 
 These are reproducible: re-running the command above regenerates every figure and
 every number in [`docs/tier_analyses_results.md`](docs/tier_analyses_results.md)
-bit for bit. If a number moves, something broke.
+bit for bit. If a number moves, something broke -- and `pytest` says so:
+`tests/test_tier_numbers.py` pins them, and CI runs it in the environment that produced
+them ([`requirements-lock.txt`](requirements-lock.txt)).
 
 ---
 
 ## Quick start
 
 ```bash
-# environment (Miniforge/mamba)
+# environment (Miniforge/mamba): the full stack, Pythia and PyTorch included
 mamba env create -f environment.yml
 conda activate jet-eec
+# ...or just the toy pipeline, notebook and tests, with pip:
+#   pip install -r requirements.txt        (add pythia8mc for step 1)
+
+# 0. do the unit, closure and documented-number tests pass?
+pytest
 
 # 1. is the pipeline correct?  -- run this FIRST, before any open data
 python src/validate_eec_pythia.py --n-events 2000 --seed 12345
@@ -65,9 +76,11 @@ python src/tier_analyses.py --n-events 2000 --seed 12345
 ```
 
 Step 1 generates Pythia dijets, clusters anti-$k_T$ $R = 0.4$ jets, and checks that
-the EEC weights sum to 1 per jet. **It must pass before open data is touched** -- a
-failure there is a pipeline bug, far cheaper to find on truth particles than on
-detector data. Steps 2 and 3 need no Pythia; `src/toy_generator.py` stands in.
+every jet equals the sum of its constituents and that the EEC weights sum to 1 per jet.
+**It must pass before open data is touched** -- a failure there is a pipeline bug, far
+cheaper to find on truth particles than on detector data. It does (Pythia 8.318 from
+the `pythia8mc` wheel): 1785 jets, closure to $10^{-15}$, normalisation 1.000000, in about
+25 s. Steps 2 and 3 need no Pythia; `src/toy_generator.py` stands in.
 
 Docker instead of conda:
 
@@ -208,13 +221,16 @@ the measurement is possible at all.
 Two quantitative results from `tier_analyses.py` make the choice concrete rather
 than a matter of taste:
 
-- **MiniAOD's angular packing puts a floor under the EEC.** Below
-  $R_L = 5\times10^{-3}$, 4 of 12 bins are empty in the packed sample and 0 in the
-  unpacked one -- and that is precisely the region where the hadronisation
-  turnover lives.
-- **A wider jet sweeps in more of the event.** $\langle p_T\rangle$ rises by
-  $2.48$ GeV going from $R = 0.4$ to $R = 1.0$, which is impossible to see at
-  PFNano because it only ever stored what was already inside $R = 0.4$.
+- **A wider jet sweeps in more of the event.** The same jets gain
+  $3.01 \pm 0.10$ GeV going from $R = 0.4$ to $R = 1.0$. The underlying event the
+  generator put in predicts 2.12 GeV of that; jets that swallow a neighbour make up
+  most of the rest. That is impossible to see at PFNano, because it only ever stored
+  what was already inside $R = 0.4$.
+- **MiniAOD's packing barely touches the EEC.** With CMSSW's 16-bit angles the
+  packed and unpacked EEC agree to 1.7% per bin above $R_L = 5\times10^{-3}$; only
+  bins near $10^{-3}$, as narrow as the packing step, reshuffle. The case for AOD is
+  control over tracking, not angular precision. (An earlier version of this page
+  claimed empty bins; that came from a toy packing ten times coarser than MiniAOD.)
 
 Mechanics in [`docs/data_tiers.md`](docs/data_tiers.md); what each tier lets you
 *measure* and in what order to attack them in
@@ -239,7 +255,8 @@ Layer 2 - ANALYSIS + ML (conda)     uproot -> awkward -> fastjet -> EEC -> hist 
 ```
 
 The same `environment.yml` and `Dockerfile` cover all four LHC experiments; only
-the Layer 1 fetch differs.
+the Layer 1 fetch differs. For the toy pipeline alone, `requirements.txt` is enough
+(`requirements-lock.txt` pins the exact versions behind the documented numbers).
 
 **System level, installed once:** Miniforge/Mambaforge, git, Docker, and
 `nvidia-container-toolkit` if you want the GPU.
@@ -288,32 +305,47 @@ available.
 
 ## Known trap: fastjet silently returns wrong jets
 
-Passing an awkward record with **extra fields** (here `charge`) to
-`fastjet.ClusterSequence` produces wrong jets with no error and no warning. Measured
-on this sample, the subjet four-vector sum missed the parent jet by up to
-**168 GeV in $p_T$ and 502 GeV in mass**.
+fastjet **3.5.1.4 and earlier** misread an awkward array whose sublists are not stored
+back to back in memory -- exactly what you get after selecting or reordering the
+constituents fastjet itself returns. Reclustering such constituents into subjets
+gives wrong jets with no error and no warning: on this sample the subjet sum missed
+the parent jet by up to **725 GeV in $p_T$ and 1480 GeV in mass** (fastjet 3.5.1.4,
+2000 events, seed 12345). The first clustering pass looked fine; only the
+reclustering exposed it.
 
-It is data dependent: the first clustering pass looked fine and only the
-reclustering step exposed it.
+It was first blamed on the extra `charge` field, because stripping the record to four
+fields made it go away. Stripping only helped because re-zipping makes a packed copy:
+`ak.to_packed` with `charge` kept is just as exact. fastjet 3.5.1.5 fixed it upstream.
 
-**Always strip to `pt, eta, phi, mass` before calling fastjet** -- `jeteec.jets.four`
-does this -- and re-associate charge or PID afterwards by $\Delta R$ matching
-(`constituents_by_dr`).
+**Pack anything you hand to fastjet** -- `jeteec.jets.clusterable` does, and every
+clustering call in `jeteec` goes through it -- and use `fastjet>=3.5.1.5`. Extra fields
+are harmless and fastjet returns them on the constituents, so charge or PID need no
+re-matching. Two more fastjet facts that bit here: jets come back **unordered** in
+$p_T$ (`jeteec.jets.cluster` sorts them), and distances are in **rapidity**, not
+pseudorapidity, which matters for soft massive particles. Details in
+[`docs/tier_analyses_results.md`](docs/tier_analyses_results.md#bugs-found-while-building-this).
 
 ---
 
 ## Repository layout
 
 ```
-environment.yml, Dockerfile     env definition and reproducible container
-src/jeteec/jets.py              clustering wrapper (fastjet, awkward)
-src/jeteec/eec.py               EEC + normalisation check
+environment.yml, Dockerfile     full env definition and reproducible container
+requirements.txt                minimal pip env (toy pipeline, notebook, tests)
+requirements-lock.txt           exact versions behind the documented numbers
+src/jeteec/jets.py              clustering wrapper (fastjet, awkward), with the layout guard
+src/jeteec/eec.py               EEC, per-jet statistical errors, normalisation check
+src/jeteec/stats.py             unbiased estimators for closure tests
+src/jeteec/kinematics.py        delta-phi / delta-R, four-vector sums
 src/jeteec/plot.py              mplhep styling
 src/validate_eec_pythia.py      run FIRST: validates the pipeline on truth
-src/toy_generator.py            dependency-free stand-in for Pythia
+src/toy_generator.py            dependency-free stand-in for Pythia, with truth record
+src/make_sample.py              writes the practice ROOT file the notebook reads
+src/inspect_file.py             lists what a ROOT file contains -- run on any new file
 src/tier_demo.py                what each data tier can and cannot do
 src/tier_analyses.py            one real analysis per tier
-notebooks/                      exploration (strip outputs before committing)
+tests/                          unit, closure, documented-number and notebook tests
+notebooks/                      tutorials and exploration (strip outputs before committing)
 data/raw|interim|processed/     not committed; see data/README.md
 results/figures|tables/          outputs; the tier_*.png are committed for the docs
 models/                         checkpoints, gitignored
@@ -323,6 +355,9 @@ docs/                           notes mirrored to Notion
 ## Reproducibility rules
 
 - Commit `environment.lock.yml` (exact versions), not just `environment.yml`.
+  For the pip path this is `requirements-lock.txt`, already committed.
+- Run `pytest` before committing a change to the analysis; if a documented number
+  moves on purpose, regenerate the figures and docs in the same commit.
 - Record the **dataset DOI / record ID** for every open-data sample used.
 - Set and log random seeds (`numpy`, `torch`) in every run; the analyses above are
   seeded so their numbers are checkable.

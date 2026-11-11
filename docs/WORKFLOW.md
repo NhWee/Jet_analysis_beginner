@@ -22,7 +22,7 @@
 | 성격 | **정본 (source of truth)** | 해석과 맥락 |
 | 담는 것 | 전체 표, 모든 수치, 그림, 실행 명령, seed | 대표 숫자 1\~2개 + 그것이 뜻하는 바 |
 | 갱신되면 | 코드를 다시 돌려 덮어쓴다 | 그날의 기록으로 남긴다 (덮어쓰지 않는다) |
-| 예 | `docs/tier_analyses_results.md` 의 전체 표 | "n = 4.85. 생성값 5.0 과의 3% 차이는 버그가 아니라 threshold migration + acceptance 효과 — 실데이터에서 unfolding 대상" |
+| 예 | `docs/tier_analyses_results.md` 의 전체 표 | "n = 5.04 ± 0.07, 생성값 5.0 과 일치. 전에 적은 n = 4.85 와 '3% 는 threshold 효과' 라는 해석은 틀렸다 — 비가중 log 공간 fit 의 편향이었다. 추정량도 검증 대상이다" |
 
 **판단 기준: 코드를 다시 돌려서 나오면 GitHub, 사람의 판단이 들어가면 Notion.**
 
@@ -42,25 +42,30 @@
 ## 1. 저장소 구조
 
 ```
-Jet_analysis/
+Jet_analysis_beginner/
 ├── README.md                 셋업과 실행 순서. 신규 진입자의 첫 페이지
-├── environment.yml           conda 환경 정의
+├── environment.yml           conda 환경 정의 (전체: Pythia, PyTorch 포함)
+├── requirements.txt          pip 최소 환경 (toy 파이프라인, 노트북, 테스트)
+├── requirements-lock.txt     문서 수치를 만든 정확한 버전
 ├── Dockerfile                재현용 컨테이너
 ├── docs/
 │   ├── WORKFLOW.md           ← 지금 이 문서
 │   ├── data_tiers.md         티어별로 무엇이 가능한지 (메커니즘)
 │   ├── tier_physics_programme.md  티어별로 무엇을 측정할 수 있는지 (물리)
-│   └── tier_analyses_results.md   실제 돌린 결과와 수치
+│   └── tier_analyses_results.md   실제 돌린 결과와 수치, 찾은 버그
 ├── src/
-│   ├── jeteec/               재사용 라이브러리 (jets, eec, plot)
-│   ├── toy_generator.py      의존성 없는 대체 샘플 생성기
+│   ├── jeteec/               재사용 라이브러리 (jets, eec, stats, kinematics, plot)
+│   ├── toy_generator.py      의존성 없는 대체 샘플 생성기 (truth 기록 포함)
 │   ├── validate_eec_pythia.py  실데이터 전 필수 검증
+│   ├── make_sample.py        노트북용 연습 ROOT 파일
+│   ├── inspect_file.py       ROOT 파일 내용 확인 — 새 파일은 항상 이것부터
 │   ├── tier_demo.py          티어별 가능/불가능 비교
 │   └── tier_analyses.py      티어별 실제 분석 4종
+├── tests/                    단위·closure·문서 수치·노트북 테스트 (pytest)
 ├── data/                     내용은 커밋하지 않음. sample register 만 기록
-├── results/figures|tables/   그림·표. 커밋하지 않음 (재생성 가능해야 함)
+├── results/figures|tables/   그림·표. 커밋하지 않음 — 단 문서가 참조하는 tier_*.png 는 예외
 ├── models/                   체크포인트. 커밋하지 않음
-└── notebooks/                탐색용. 커밋 전 output 제거
+└── notebooks/                튜토리얼·탐색용. 커밋 전 output 제거
 ```
 
 ---
@@ -68,9 +73,12 @@ Jet_analysis/
 ## 2. 재현 방법
 
 ```bash
-# 환경
+# 환경 (또는 pip install -r requirements.txt)
 mamba env create -f environment.yml
 conda activate jet-eec
+
+# 0) 테스트: 단위 검사, closure, 문서에 적힌 수치, 노트북 실행
+pytest
 
 # 1) 파이프라인이 옳은지 먼저 확인 (실데이터 전 필수)
 python src/validate_eec_pythia.py --n-events 2000 --seed 12345
@@ -84,6 +92,12 @@ python src/tier_analyses.py --n-events 2000 --seed 12345
 
 모든 스크립트는 `--seed` 를 받는다. **결과를 기록할 때는 seed 를 반드시 함께 적는다.**
 seed 없는 숫자는 재현할 수 없으므로 기록으로서 가치가 없다.
+
+**숫자에는 통계 오차를 붙인다.** 오차 없는 "3% 차이" 는 해석할 수 없다 — 이 저장소의 AOD
+결과가 그랬다 (오차를 붙이니 모두 1σ 안이었다). toy 처럼 답을 아는 경우에는 그 답도 옆에 적는다.
+
+`tests/test_tier_numbers.py` 가 `docs/tier_analyses_results.md` 의 수치를 고정한다. 코드를 고쳐
+수치가 바뀌는 것이 의도된 것이면, 그림·문서·테스트를 **같은 커밋에서** 함께 갱신한다.
 
 ---
 
@@ -113,6 +127,9 @@ seed 없는 숫자는 재현할 수 없으므로 기록으로서 가치가 없�
 **절대 커밋하지 않는 것:** 데이터 파일(`.root`, `.parquet`), 모델 체크포인트,
 그림·표, notebook output. 모두 재생성 가능해야 하고, 재생성이 안 되면 그건
 파이프라인이 불완전하다는 뜻이다.
+
+예외 하나: README 와 `docs/` 가 보여주는 `results/figures/tier_*.png` 는 커밋한다 (없으면
+GitHub 에서 그림이 깨진다). 고정 seed 로 `requirements-lock.txt` 환경에서 재생성한 것만 올린다.
 
 ---
 
@@ -175,13 +192,30 @@ CMSSW 를 최소 한 번은 거쳐야 한다.
 
 ## 6. 알려진 함정
 
-**fastjet 에 4-momentum 외 필드를 넘기지 말 것.** `charge` 같은 필드가 붙은 record 를
-`ClusterSequence` 에 넘기면 **조용히 틀린 jet** 이 나온다. 예외도 경고도 없다.
-측정값: subjet 4-벡터 합이 부모 jet 과 pT 168 GeV, mass 502 GeV 까지 어긋났다.
-데이터 의존적이라 첫 클러스터링은 멀쩡해 보였고 재클러스터링에서야 드러났다.
+**fastjet 3.5.1.4 이하는 메모리에 빈틈 없이 이어지지 않은 배열을 잘못 읽는다.** fastjet 이
+돌려준 constituent 를 골라내거나(acceptance cut) 순서를 바꾼 뒤 다시 `ClusterSequence` 에
+넘기면 **조용히 틀린 jet** 이 나온다. 예외도 경고도 없다. 측정값: subjet 4-벡터 합이 부모 jet 과
+pT 725 GeV, mass 1480 GeV 까지 어긋났다 (fastjet 3.5.1.4, 2000 이벤트, seed 12345. 처음 봤을 때는
+168 GeV / 502 GeV). 첫 클러스터링은 멀쩡해 보였고 재클러스터링에서야 드러났다.
 
-가드는 `jeteec.jets.four()` 에 있다. charge/PID 가 필요하면 클러스터링 후
-`constituents_by_dr()` 로 dR 매칭해 되살린다.
+처음에는 `charge` 같은 여분 필드 탓으로 기록했지만 **틀린 진단이었다.** 필드를 지운 `four()`
+가 통했던 것은 다시 묶으면서 배열이 연속으로 복사됐기 때문이다. `charge` 를 둔 채
+`ak.to_packed` 만 해도 정확하다. fastjet 3.5.1.5 에서 고쳐졌다. 교훈: 고쳐졌다고 원인을 안
+것은 아니다. **원인을 확인하는 대조 실험** (필드는 그대로, 배열 형태만 바꾸기) 을 했어야 했다.
+
+가드는 `jeteec.jets.clusterable()` (`ak.to_packed`) 에 있고, `jeteec` 의 모든 클러스터링이
+이것을 거친다. charge/PID 는 fastjet 이 constituent 에 그대로 달아서 돌려주므로 dR 로 다시
+찾을 필요가 없다 (dR 매칭은 jet 의 3% 에서 틀렸다).
+
+**fastjet 은 jet 을 pT 순서로 정렬해 주지 않는다.** `jets[:, 0]` 을 leading jet 으로 쓰면
+3-jet 이벤트에서 엉뚱한 쌍을 고른다. `jeteec.jets.cluster` 가 정렬한다.
+
+**fastjet 의 거리는 η 가 아니라 래피디티 y 로 잰다.** 질량에 비해 pT 가 크지 않은 부드러운
+입자는 y 와 η 가 크게 달라서, η 로 잰 ΔR 과 클러스터링 결과가 어긋난다.
+
+**fit 방법도 검증 대상이다.** log(count) 에 직선을 긋는 비가중 최소제곱 fit 은 입력 5.0 에서
+4.85 를 냈고, 그 3% 를 물리 효과로 잘못 해석했다. 답을 아는 toy 에서 추정량의 편향부터
+확인한다 (`tests/test_stats.py`).
 
 **`.gitignore` 에서 `data/**` 만 쓰면 안 된다.** git 은 제외된 디렉터리 내부를 보지 않으므로
 `!data/**/.gitkeep` 부정 패턴이 동작하지 않는다. `!data/**/` 를 함께 넣어야 한다.

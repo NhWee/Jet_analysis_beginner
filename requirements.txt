@@ -1,0 +1,13 @@
+# Minimal pip environment for the toy pipeline, the notebook and the tests:
+#   pip install -r requirements.txt && pytest
+# The full stack (Pythia, PyTorch, coffea, energyflow, ...) is environment.yml.
+# The documented numbers were produced with the exact versions in requirements-lock.txt.
+numpy
+awkward>=2
+vector
+fastjet>=3.5.1.5   # <= 3.5.1.4 silently mis-clusters non-contiguous input (README, "Known trap")
+uproot>=5
+matplotlib
+mplhep
+pytest
+# optional: pythia8mc   (Pythia 8 wheel; lets src/validate_eec_pythia.py run without conda)
