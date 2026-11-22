@@ -283,3 +283,86 @@ def normalisation_check(constituents: ak.Array, chunk_size: int | None = None) -
         _, w = _weights(constituents[lo:hi], "sum_pt", None)
         acc += float(ak.sum(ak.sum(w, axis=-1)))
     return acc / n
+
+
+def per_jet_histograms(
+    constituents: ak.Array,
+    bins: np.ndarray | None = None,
+    chunk_size: int | None = None,
+    dtype=np.float64,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Per-jet EEC bin contents ``(edges, H)`` with ``H`` of shape ``(n_jets, n_bins)``.
+
+    ``H[j, b]`` is the summed pair weight (``norm="sum_pt"``, self-pairs included) of jet
+    ``j`` in bin ``b``, *not* divided by the bin width. Keeping the per-jet histograms lets
+    several samples be combined, reweighted or bootstrapped afterwards without recomputing
+    the pairs. :func:`eec_from_per_jet` turns them into the same :class:`EECResult` as
+    :func:`eec_with_errors`. Memory: ``n_jets * n_bins`` numbers (use ``dtype=np.float32``
+    for large samples).
+    """
+    if bins is None:
+        bins = np.logspace(-3, 0, 51)
+    edges = np.asarray(bins, dtype=float)
+    nb = len(edges) - 1
+    n_jets = len(constituents)
+    out = np.zeros((n_jets, nb), dtype=dtype)
+    for lo, hi in _iter_chunks(n_jets, chunk_size):
+        dr, w = _weights(constituents[lo:hi], "sum_pt", None)
+        dr_flat = ak.to_numpy(ak.flatten(dr, axis=None))
+        w_flat = ak.to_numpy(ak.flatten(w, axis=None))
+        jet_idx = np.repeat(np.arange(hi - lo), ak.to_numpy(ak.num(dr, axis=-1)))
+        b = np.searchsorted(edges, dr_flat, side="right") - 1
+        b[dr_flat == edges[-1]] = nb - 1
+        ok = (b >= 0) & (b < nb)
+        out[lo:hi] = np.bincount(jet_idx[ok] * nb + b[ok], weights=w_flat[ok],
+                                 minlength=(hi - lo) * nb).reshape(hi - lo, nb)
+    return edges, out
+
+
+def eec_from_per_jet(edges, per_jet, jet_weights=None) -> EECResult:
+    """Weighted jet average of per-jet histograms, with the jet-level SEM.
+
+    Same estimator and error as :func:`eec_with_errors` (weighted SEM with the
+    ``n_eff/(n_eff-1)`` factor; unweighted when ``jet_weights`` is None).
+    """
+    edges = np.asarray(edges, dtype=float)
+    h = np.asarray(per_jet, dtype=float)
+    n = h.shape[0]
+    if n == 0:
+        raise ValueError("no jets supplied")
+    w = np.ones(n) if jet_weights is None else np.asarray(jet_weights, dtype=float)
+    if len(w) != n:
+        raise ValueError("jet_weights must have one entry per jet")
+    sw, sw2 = w.sum(), (w**2).sum()
+    if sw <= 0:
+        raise ValueError("sum of jet_weights must be positive")
+    m = (w @ h) / sw
+    n_eff = sw**2 / sw2
+    var_m = (w**2) @ (h - m) ** 2 / sw**2
+    var_m = var_m * n_eff / (n_eff - 1) if n_eff > 1 else np.full(len(m), np.nan)
+    dlog = np.diff(np.log(edges))
+    return EECResult(centres=np.sqrt(edges[:-1] * edges[1:]), edges=edges,
+                     values=m / dlog, errors=np.sqrt(var_m) / dlog, n_jets=n,
+                     n_eff=float(n_eff))
+
+
+def shape(values: np.ndarray, edges: np.ndarray, rl_range=None) -> np.ndarray:
+    """EEC normalised to unit area in ``d log R_L`` over the bins (or over ``rl_range``).
+
+    Use this, not the raw values, to compare samples with different multiplicity. The raw
+    EEC sums to 1 *including* the self-pairs at R_L = 0, which lie outside the bins and carry
+    weight sum z_i^2; a sample with fewer constituents therefore has less weight in the bins
+    and its raw curve is offset. ``rl_range = (lo, hi)`` normalises over bins whose centre is
+    inside that range only (the common range of two samples); bins outside are still scaled.
+    """
+    values = np.asarray(values, dtype=float)
+    edges = np.asarray(edges, dtype=float)
+    dlog = np.diff(np.log(edges))
+    m = np.ones(len(values), dtype=bool)
+    if rl_range is not None:
+        c = np.sqrt(edges[:-1] * edges[1:])
+        m = (c > rl_range[0]) & (c < rl_range[1])
+    area = np.sum(values[m] * dlog[m])
+    if area <= 0:
+        raise ValueError("EEC has no weight in the normalisation range")
+    return values / area
