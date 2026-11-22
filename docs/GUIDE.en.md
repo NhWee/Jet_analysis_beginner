@@ -166,7 +166,7 @@ never break.
 | file | what it checks |
 |---|---|
 | `tests/test_eec.py` | EEC weights sum to exactly 1, a hand-computed two-particle jet, angles across φ = ±π, chunked = unchunked, the definition of the statistical error, pT slicing, jet weights |
-| `tests/test_jets.py` | **regression test for the fastjet trap**: extra fields such as `charge` must not change the jets; constituents sum to the jet; cuts applied; selecting the N hardest jets |
+| `tests/test_jets.py` | **regression test for the fastjet trap**: reclustering non-contiguous (reselected) constituents must close; extra fields do not change the jets and reach the constituents; constituents sum to the jet; pT ordering; cuts applied; selecting the N hardest jets |
 | `tests/test_mod.py` | conversion of MOD-format particles: pileup removal (CHS), charged selection, dropping particles by pid, rapidity → pseudorapidity |
 
 **Output:**
@@ -332,7 +332,7 @@ shower and a hadronisation model, so for the first time the shapes mean somethin
 flowchart TD
     A["[1] generate Pythia 8 events<br/>HardQCD, 13 TeV, pTHat > 100 GeV"]
     B["keep final-state particles<br/>visible, |η| < 4, pT > 0.2 GeV"]
-    C["[2] four(): keep only pt, eta, phi, mass<br/>(avoids the fastjet trap)"]
+    C["[2] clusterable(): packed copy (ak.to_packed)<br/>(avoids the fastjet trap)"]
     D["fastjet anti-kT R = 0.4<br/>jet pT > 100 GeV, |η| < 2"]
     E["[3] for every jet, every particle pair (i, j)<br/>ΔR = √(Δη² + Δφ²)<br/>weight = pT_i · pT_j / (Σ pT)²"]
     F["normalisation check: weights sum to 1 per jet?"]
@@ -343,9 +343,13 @@ flowchart TD
 
 **Why each step is the way it is.**
 
-- **Why strip fields with `four()`.** Passing an array with extra fields such as `charge` to
-  fastjet gives **wrong jets with no error**. In this repository jets were once off by up to
-  168 GeV in pT and 502 GeV in mass. `tests/test_jets.py` prevents a recurrence.
+- **Why repack with `clusterable()`.** fastjet 3.5.1.4 and earlier misread an array whose
+  sublists are not contiguous in memory (constituents returned by fastjet, then selected or
+  reordered) and give **wrong jets with no error**. It was first blamed on extra fields such as
+  `charge` and fixed by stripping them with `four()`. That only worked because re-zipping makes
+  a packed copy (README, "Known trap"). Every fastjet call in `jeteec.jets` now goes through
+  `ak.to_packed`, and extra fields are carried through to the constituents.
+  `tests/test_jets.py` prevents a recurrence.
 - **Why the normalisation is exactly 1.** Summing all pairs including self-pairs (i = j) gives
   (Σ pTᵢ)² / (Σ pTₖ)² = 1. That is arithmetic, not physics. So anything other than 1 means the
   particle list or the weights are wrong, **before any physics is looked at**.
@@ -597,7 +601,7 @@ With seed 12345 these numbers must agree. If any differs, the environment or the
 | step 7 says "no Pythia table" | step 6 not run (tables are not committed) | run step 6 first |
 | after a run, `git status` shows modified `results/figures/*.png` | redrawing changes the bytes slightly | normal if the numbers match; restore with `git checkout results/figures` |
 | numbers differ slightly on another machine | package versions | use the exact versions in `requirements.txt` |
-| jets look wrong in your own code | extra fields passed to fastjet | keep only pt/eta/phi/mass with `jeteec.jets.four()` before clustering |
+| jets look wrong in your own code | non-contiguous array passed to fastjet (fastjet ≤ 3.5.1.4) | pass it through `jeteec.jets.clusterable()`, or use `jeteec.jets.cluster` / `subjets`; use fastjet ≥ 3.5.1.5 |
 
 ---
 

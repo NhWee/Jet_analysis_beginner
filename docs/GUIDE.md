@@ -162,7 +162,7 @@ python -m pytest -q tests
 | 파일 | 검사하는 것 |
 |---|---|
 | `tests/test_eec.py` | EEC 가중치 합 = 정확히 1, 손으로 계산한 2입자 jet 값, φ 가 ±π 를 넘을 때의 각도 계산, 나눠 계산해도 결과 동일, 통계 오차 정의, pT 구간 나누기, jet 가중치 |
-| `tests/test_jets.py` | **fastjet 함정 재발 방지**: `charge` 같은 추가 필드가 붙어도 jet 이 같아야 함, constituent 합 = jet, 컷 적용, 가장 센 N개 jet 선택 |
+| `tests/test_jets.py` | **fastjet 함정 재발 방지**: 메모리에 연속이 아닌 배열(재선택한 constituent)을 다시 클러스터링해도 closure 가 맞아야 함, 추가 필드는 jet 을 바꾸지 않고 constituent 까지 전달됨, constituent 합 = jet, pT 순서, 컷 적용, 가장 센 N개 jet 선택 |
 | `tests/test_mod.py` | MOD 형식 입자 → 파이프라인 형식 변환: pileup 제거(CHS), charged 선택, pid 로 입자 빼기, rapidity → pseudorapidity |
 
 **출력:**
@@ -321,7 +321,7 @@ python src/validate_eec_pythia.py --n-events 2000 --seed 12345
 flowchart TD
     A["[1] Pythia 8 이벤트 생성<br/>HardQCD, 13 TeV, pTHat > 100 GeV"]
     B["최종 상태 입자만 남김<br/>보이는 입자, |η| < 4, pT > 0.2 GeV"]
-    C["[2] four(): pt, eta, phi, mass 만 남김<br/>(fastjet 함정 방지)"]
+    C["[2] clusterable(): 메모리에 연속인 복사본 (ak.to_packed)<br/>(fastjet 함정 방지)"]
     D["fastjet anti-kT R = 0.4<br/>jet pT > 100 GeV, |η| < 2"]
     E["[3] jet 마다 모든 입자 쌍 (i, j)<br/>ΔR = √(Δη² + Δφ²)<br/>가중치 = pT_i · pT_j / (Σ pT)²"]
     F["정규화 검사: jet 마다 가중치 합 = 1 ?"]
@@ -332,9 +332,12 @@ flowchart TD
 
 **각 단계가 왜 그렇게 되어 있나.**
 
-- **`four()` 로 필드를 줄이는 이유.** `charge` 같은 추가 필드가 붙은 배열을 fastjet 에 넘기면
-  **오류 없이 틀린 jet** 이 나온다. 이 저장소에서 실제로 pT 168 GeV, 질량 502 GeV 까지
-  어긋난 적이 있다. `tests/test_jets.py` 가 재발을 막는다.
+- **`clusterable()` 로 배열을 다시 포장하는 이유.** fastjet 3.5.1.4 이하는 sublist 가 메모리에
+  연속으로 놓이지 않은 배열(fastjet 이 돌려준 constituent 를 고르거나 재배열한 것)을 잘못 읽어
+  **오류 없이 틀린 jet** 을 낸다. 처음엔 `charge` 같은 추가 필드 탓으로 알고 `four()` 로 필드를
+  줄였는데, 실제로는 다시 묶으면서 연속 복사본이 생겨서 고쳐진 것이었다 (README "Known trap").
+  지금은 `jeteec.jets` 의 모든 fastjet 호출이 `ak.to_packed` 를 거치고, 추가 필드는 그대로
+  constituent 까지 전달된다. `tests/test_jets.py` 가 재발을 막는다.
 - **정규화가 정확히 1 인 이유.** 자기 자신과의 쌍(i = j)까지 포함해 모든 쌍을 더하면
   (Σ pTᵢ)² / (Σ pTₖ)² = 1 이다. 물리와 무관한 산수다. 그래서 1 이 아니면 **물리를 보기 전에**
   입자 목록이나 가중치가 틀렸다는 뜻이다.
@@ -579,7 +582,7 @@ seed 12345 로 돌렸을 때 반드시 같아야 하는 숫자다. 하나라도 
 | 7단계가 "no Pythia table" | 6단계를 안 돌림 (표는 커밋되지 않음) | 6단계 먼저 |
 | 실행 후 `git status` 에 `results/figures/*.png` 가 수정됨 | 그림을 다시 그리면서 바이트가 조금 달라짐 | 숫자가 같으면 정상. `git checkout results/figures` 로 되돌린다 |
 | 다른 컴퓨터에서 숫자가 미세하게 다름 | 패키지 버전 차이 | `requirements.txt` 의 정확한 버전 사용 |
-| 직접 짠 코드에서 jet 이 이상함 | fastjet 에 추가 필드를 넘김 | `jeteec.jets.four()` 로 pt/eta/phi/mass 만 남긴 뒤 클러스터링 |
+| 직접 짠 코드에서 jet 이 이상함 | 메모리에 연속이 아닌 배열을 fastjet 에 넘김 (fastjet ≤ 3.5.1.4) | `jeteec.jets.clusterable()` 을 거쳐 넘기거나 `jeteec.jets.cluster` / `subjets` 를 쓴다. fastjet ≥ 3.5.1.5 |
 
 ---
 

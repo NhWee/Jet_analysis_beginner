@@ -1,3 +1,7 @@
+# Runs the test suite on every push and pull request, in the pinned pip environment
+# (requirements.txt; requirements-lock.txt records the full freeze of the toy stack).
+# A failure in tests/test_tier_numbers.py means a documented number moved: fix the bug, or
+# regenerate the docs and figures together with the code.
 name: tests
 
 on:
@@ -15,8 +19,8 @@ jobs:
           cache: pip
           cache-dependency-path: requirements.txt
       - run: pip install -r requirements.txt
-      - name: unit tests
-        run: python -m pytest -q tests
+      - name: Unit, closure, documented-number and notebook tests
+        run: python -m pytest -q
       - name: tier analyses (toy, small)
         run: python src/tier_analyses.py --n-events 300 --seed 12345
       - name: tier demo and ROOT sample tools (small)
@@ -24,5 +28,5 @@ jobs:
           python src/tier_demo.py --n-events 100 --seed 12345
           python src/make_sample.py
           python src/inspect_file.py data/raw/sample_events.root --grep pt
-      - name: Pythia validation (small) — normalisation must be exactly 1
+      - name: Pythia validation (small) — closure and normalisation must hold
         run: python src/validate_eec_pythia.py --n-events 300 --seed 12345

@@ -4,8 +4,9 @@ Run this BEFORE touching Open Data. With generator truth you control everything,
 problem here is a bug in the pipeline, not in the data. Checks performed:
 
   1. jets are found and have sensible pT / multiplicity
-  2. EEC weights sum to ~1 per jet (normalisation check)
-  3. the EEC distribution has the expected shape, saved to results/figures/
+  2. every jet equals the four-vector sum of its constituents (closure)
+  3. EEC weights sum to ~1 per jet (normalisation check), and the EEC shape, saved to
+     results/figures/
   4. the EEC in jet-pT slices, with statistical errors, plotted against R_L and R_L*pT:
      the hadronisation turnover sits at R_L ~ Lambda_QCD/pT, so it should line up in R_L*pT
   5. (--compare-hadronisation) the same jets generated with hadronisation switched off,
@@ -32,9 +33,14 @@ import numpy as np
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 
-from jeteec import eec as eec_mod
-from jeteec import jets as jets_mod
-from jeteec import plot as plot_mod
+import matplotlib  # noqa: E402
+
+matplotlib.use("Agg")
+
+from jeteec import eec as eec_mod  # noqa: E402
+from jeteec import jets as jets_mod  # noqa: E402
+from jeteec import plot as plot_mod  # noqa: E402
+from jeteec.kinematics import sum_p4  # noqa: E402
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
 
@@ -208,10 +214,16 @@ def main() -> int:
     print(f"      {n_jets} jets (effective {n_eff:.0f}), <pT> = {wmean(jets_flat.pt, jw):.1f} GeV, "
           f"<n_const> = {wmean(ak.num(const_flat), jw):.1f}")
 
+    total = sum_p4(const_flat)
+    closure = float(ak.max(abs(total.pt - jets_flat.pt) / jets_flat.pt))
+    print(f"      closure: max |sum(constituents) - jet| / jet pT = {closure:.1e} "
+          f"(expect ~1e-15)")
+    closure_ok = closure < 1e-9
+
     print(f"[3/{n_steps}] computing EEC ...")
     norm = eec_mod.normalisation_check(const_flat, chunk_size=args.chunk_size)
     print(f"      normalisation = {norm:.6f} (expect 1.0)")
-    ok = abs(norm - 1.0) < 1e-6
+    norm_ok = abs(norm - 1.0) < 1e-6
 
     res = eec_mod.eec_with_errors(const_flat, chunk_size=args.chunk_size, jet_weights=jw)
     peak = res.centres[np.argmax(res.values)]
@@ -337,8 +349,10 @@ def main() -> int:
         plt.close(fig)
         print(f"      figure -> {out.relative_to(REPO)}")
 
-    print("\nRESULT:", "PASS" if ok else "FAIL (normalisation off)")
-    return 0 if ok else 1
+    failures = [name for name, good in (("closure", closure_ok),
+                                        ("normalisation", norm_ok)) if not good]
+    print("\nRESULT:", "PASS" if not failures else f"FAIL ({', '.join(failures)} off)")
+    return 0 if not failures else 1
 
 
 if __name__ == "__main__":

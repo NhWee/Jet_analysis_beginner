@@ -46,6 +46,7 @@ dependencies:
   - jupyterlab
   - ipykernel
   - git
+  - pytest                # `pytest` runs tests/ (unit, closure and documented-number tests)
 
   # --- Optional (uncomment if you want ROOT-native workflows) ---
   # - root                # PyROOT / RDataFrame; installs cleanly from conda-forge
@@ -54,6 +55,7 @@ dependencies:
   - pip
   - pip:
       # versions pinned to match requirements.txt (the verified pip route)
-      - fastjet==3.5.2.0    # scikit-hep FastJet: clustering + energy correlators (awkward interface)
+      - fastjet==3.5.2.0    # scikit-hep FastJet (awkward interface); <= 3.5.1.4 silently mis-clusters
+                            # non-contiguous input -- see README "Known trap"
       - energyflow==1.4.0   # EFPs, EFN/PFN, EMD, MOD datasets — jets + ML + correlators
       - pythia8mc==8.318.3  # Pythia 8 event generator; `import pythia8mc`

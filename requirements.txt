@@ -2,9 +2,10 @@
 # Verified 2026-11-05 on Python 3.13 in a fresh venv, and in CI (.github/workflows/tests.yml).
 #   python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
 # The conda route is environment.yml (adds pytorch, coffea, jupyterlab, ...); this file is
-# NOT a lock of that environment.
+# NOT a lock of that environment. requirements-lock.txt is the full pip freeze of the toy stack
+# that produced the tier numbers in README.md.
 awkward==2.14.0
-fastjet==3.5.2.0
+fastjet==3.5.2.0   # >= 3.5.1.5 required: <= 3.5.1.4 silently mis-clusters non-contiguous input
 vector==1.9.0
 uproot==5.7.7
 numpy==2.5.3
