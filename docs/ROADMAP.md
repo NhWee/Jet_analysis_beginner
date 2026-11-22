@@ -1,13 +1,13 @@
 # 보완 사항과 다음 단계 (Roadmap)
 
 2026-11 기준 저장소 상태를 점검한 결과다.
-**현재 위치 (2026-11-05 갱신): 파이프라인은 toy 와 Pythia truth 로 검증됐고, 첫 실데이터 EEC (CMS 2011A MOD, 검출기 수준, unfolding 없음)를 Pythia 기준선과 비교했다.**
+**현재 위치 (2026-11-22 갱신): 파이프라인은 toy 와 Pythia truth 로 검증됐고, 첫 실데이터 EEC (CMS 2011A MOD, 검출기 수준, unfolding 없음)를 Pythia 기준선과 비교했다. MOD SIM 으로 data/Pythia 차이 세 가지가 주로 검출기 효과임을 확인했다.**
 
 ## 진행 상황
 
 | # | 상태 | 비고 |
 |---|---|---|
-| A1 테스트 | ✅ | `tests/` 32개, 수 초 내. `python -m pytest -q tests` |
+| A1 테스트 | ✅ | `tests/` 39개, 수 초 내. `python -m pytest -q tests` |
 | A2 CI | ✅ | `.github/workflows/tests.yml`: pytest + toy tier 분석 + Pythia 검증(소규모) |
 | A3 lock 파일 | ✅ | pip: `requirements.txt`. conda: `environment.lock.yml` (linux-64, micromamba 로 생성 후 그 파일로 새 환경을 만들어 검증). conda 경로 검증 중 Python 3.11 numpy 다운그레이드와 conda-forge Pythia 버전 차이를 찾아 수정 |
 | A4 Pythia 검증 | ✅ | PASS, 결과는 [pythia_validation_results.md](pythia_validation_results.md). sample register P8-001/002 |
@@ -31,9 +31,17 @@ pTHatMin 을 임계값 근처에 두면 jet 의 3–9% 를 잃는다는 것을 �
 - data/Pythia 모양 비: R_L < 0.01 에서 0.58, 0.01–0.1 에서 0.91, 0.1–0.5 에서 1.32
 - 작은 각도 쪽 half-rise R_L·pT: Pythia 는 pT 구간 사이 거의 일정(2.79→2.54 GeV), 데이터는 2.94→4.57 GeV 로 증가
 - R_L ≈ 0.3 의 두 번째 극대는 중성 강입자 PFC 가 만든다 (pileup 무관)
-- 검출기 수준 vs truth 라 원인은 판정하지 않았다. `quality` 열이 전부 5 라 품질 컷은 무의미했다
+- 검출기 수준 vs truth 라 원인은 판정하지 않았다
+- (2026-11-22 정정) "`quality` 가 전부 5" 는 `ds.quality`(열 번호)를 값으로 읽은 실수. 값은 `ds.qualitys`, 품질 컷은 데이터 jet 의 3.1% 를 뺀다
 
-다음 할 일: MOD **SIM** 샘플(Pythia 6 + CMS 검출기 시뮬레이션)을 같은 스크립트로 돌려, 위 세 차이가 검출기 효과인지 확인 → MOD GEN 과 Pythia 8 기준선 비교 → unfolding.
+MOD SIM 검출기 점검 (단계 3a, SIM 파일 27/355, 2587771 jet, n_eff 742139): ✅ 결과는 [mod_sim_results.md](mod_sim_results.md).
+- 같은 jet 의 SIM-reco/SIM-gen: R_L < 0.01 에서 0.520, 0.1–0.5 에서 1.377 → 관찰 1 (0.58) 은 주로 검출기 효과. data/SIM-reco 0.906 잔여 (charged 만이면 0.99)
+- R_L ≈ 0.3 극대: gen 에는 없고 reco 중성 강입자 PFC 가 만든다 → 검출기 효과. 크기는 데이터가 더 큼 (미해명)
+- half-rise R_L·pT: SIM-reco 2.93→4.39 GeV (데이터 2.94→4.57), 같은 jet 의 gen 2.35→2.14 → 검출기 효과
+- SIM-gen / Pythia 8 (Pythia 6 Z2 vs 8): 작은 각도 1.24, 큰 각도 0.88
+- k-factor·npv 재가중은 모든 비를 ≤ 0.008 바꾼다
+
+다음 할 일: 같은 SIM reco/gen 쌍으로 unfolding (bin-by-bin 보정 → 반복 Bayesian) → arXiv:2201.07800 과 비교. 남은 데이터/SIM 잔여 (작은 각도 중성 9%, 큰 각도 9%) 의 계통 오차 평가.
 
 판단 근거와 진행 기록은 Notion 연구 허브에 남긴다 ([WORKFLOW.md](WORKFLOW.md) §4).
 이 문서는 "무엇을, 어떤 순서로, 무엇이 되면 끝인가" 만 적는다.
@@ -124,4 +132,4 @@ A1 이 있어야 A5~A8 을 고칠 때 기존 결과가 깨지지 않았음을 �
 2. ~~`validate_eec_pythia.py` 실행하고 결과 기록 (A4)~~ ✅
 3. ~~CMS 2011A MOD 데이터셋 접근 가능 여부 확인 (단계 3a)~~ ✅ 공개 확인
 4. ~~MOD 파일 받아 첫 실데이터 EEC~~ ✅ 파일 3개, [mod_data_results.md](mod_data_results.md)
-5. MOD SIM 샘플로 같은 분석 (검출기 효과 분리)
+5. ~~MOD SIM 샘플로 같은 분석 (검출기 효과 분리)~~ ✅ 파일 27개, [mod_sim_results.md](mod_sim_results.md)

@@ -12,7 +12,8 @@ python src/analyze_mod.py --n-files 3
 > **Detector-level data against generator-level MC.** There is no unfolding, no systematic
 > uncertainty and no detector simulation. Errors are statistical only (jet-level SEM). The
 > differences below are **observations**, not physics conclusions. A like-for-like comparison
-> needs the MOD SIM sample (Pythia 6 + CMS detector simulation), which has not been run yet.
+> needs the MOD SIM sample (Pythia 6 + CMS detector simulation): see
+> [mod_sim_results.md](mod_sim_results.md), which finds all three differences to be mainly detector effects.
 
 ---
 
@@ -45,7 +46,7 @@ Before the first run, these were read off the files rather than assumed:
 | CHS: drop charged PFCs with vertex > 0 | `energyflow`'s own CHS keeps `vertex <= 0`. Neutrals are assigned to vertex 0, so the two rules give the same result | ✅ |
 | PFCs are the jet's constituents | \|Σ p⃗T(PFC)\| / jet pT = 1.00000 (1st–99th percentile), max ΔR(PFC, jet axis) has median 0.49 | ✅ |
 | pid values | {±11, ±13, 22, 130, ±211}. File 0, 375–450 GeV: charged hadrons (±211) 55% of the PFCs and 61% of the pT, photons (22) 37% / 31%, neutral hadrons (130) 7.7% / 7.2%, e and μ < 1% | ✅ |
-| `quality` is 0–3 ("tight" = 3) | **every jet in file 0 has `quality = 5`** | ⚠️ the cut `quality >= 2` keeps everything. The value 5 is not explained in the `energyflow` docs. Not investigated further |
+| `quality` is 0–3 ("tight" = 3) | ✅ values 0–3 in `ds.qualitys`. File 0 after pT and η cuts: 2419 / 628 / 72 / 94495 jets with quality 0 / 1 / 2 / 3, so `quality >= 2` removes 3047 (3.1%) | ✅ *Corrected 2026-11-22.* This row first said "every jet has quality = 5". That was `ds.quality`, the column index of quality in `jets_i`, read as a value. The selection always used the values, so all jet counts stand. See [mod_sim_results.md](mod_sim_results.md#jet-quality-quality) |
 
 **Pipeline check: `normalisation = 1.000000`** ✅ (also on file 0 alone).
 
@@ -161,7 +162,7 @@ an extracted effect.
 - **3 of 18 files** (284059 of about 1.79 M jets before cuts). Data statistics are already
   better than the Pythia baseline (effective 5840 jets). More files would not change the
   conclusions above, and Pythia statistics limit the ratio.
-- **Jet quality cut is a no-op** on these files (`quality = 5` for all jets).
+- ~~Jet quality cut is a no-op~~: corrected. It removes 3.1% of the jets (see the table above).
 - **No trigger-efficiency or luminosity treatment.** The threshold 375 GeV is taken from
   arXiv:1908.08542 as the point where HLT_Jet300 is fully efficient. This was not re-checked.
 - **Peak and turnover positions are quantised by the binning** (about 15% steps). Use the
@@ -169,7 +170,13 @@ an extracted effect.
 
 ## Next
 
-1. Run the MOD **SIM** sample through the same script. If SIM reproduces both the 0.58 / 1.32
-   pattern and the R_L·pT drift, those are detector effects.
-2. Compare MOD **GEN** with this Pythia 8 baseline to separate Pythia 6 vs 8 at truth level.
-3. Then unfold, and compare with the published CMS Open Data EEC analysis (arXiv:2201.07800).
+1. ~~Run the MOD **SIM** sample through the same script.~~ Done in
+   [mod_sim_results.md](mod_sim_results.md). SIM reproduces the 0.58 / 1.32 pattern (same-jet
+   reco/gen 0.52 / 1.38) and the R_L·pT drift (SIM-reco 2.93 → 4.39 GeV), so both are mainly
+   detector effects. The R_L ≈ 0.3 maximum is made by reconstructed neutral-hadron PFCs. Residual
+   data/SIM-reco: 0.91 at small angle (neutral PFCs only) and 1.09 at large angle.
+2. ~~Compare MOD **GEN** with this Pythia 8 baseline.~~ Done with the gen-level particles of the
+   SIM jets: SIM-gen / Pythia 8 = 1.24 / 1.02 / 0.88. The stable-particle definitions still need
+   cross-checking.
+3. Unfold with the SIM reco/gen pairs, and compare with the published CMS Open Data EEC analysis
+   (arXiv:2201.07800).
