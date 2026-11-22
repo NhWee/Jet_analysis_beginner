@@ -535,7 +535,7 @@ RESULT: PASS
 
 | line | meaning |
 |---|---|
-| `94567 jets after selection` | jets passing the cuts, out of the 100000 in one file. `quality` is 5 for every jet in this file, so the quality cut removes nothing |
+| `94567 jets after selection` | jets passing the cuts, out of the 100000 in one file. The quality cut (`quality >= 2`, medium) removes 3047 of the 97614 jets that pass pT and η (3.1%). The values are in `ds.qualitys` (0–3). `ds.quality` is the column index (5), not a value |
 | `weights: min = max` | all jet weights are equal in this sample, so the effective number of jets equals the number of jets |
 | `<n_const> all = 38.6, charged = 18.9` | PF particles per jet after CHS. Pythia truth has 42.1 |
 | `normalisation = 1.000000` | **pass criterion** |

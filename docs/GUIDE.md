@@ -519,7 +519,7 @@ RESULT: PASS
 
 | 줄 | 의미 |
 |---|---|
-| `94567 jets after selection` | 파일 하나의 jet 100000개 중 컷 통과. `quality` 는 이 파일에서 전부 5 라 품질 컷은 아무것도 빼지 않는다 |
+| `94567 jets after selection` | 파일 하나의 jet 100000개 중 컷 통과. 품질 컷(`quality >= 2`, medium)은 pT·η 컷을 통과한 97614개 중 3047개(3.1%)를 뺀다. 값은 `ds.qualitys` (0–3) 에 있다. `ds.quality` 는 열 번호(5)라서 값으로 읽으면 안 된다 |
 | `weights: min = max` | 이 샘플 안에서 jet 가중치가 모두 같다. 그래서 유효 jet 수 = jet 수 |
 | `<n_const> all = 38.6, charged = 18.9` | CHS 후 jet 당 PF 입자 수. Pythia truth 는 42.1 |
 | `normalisation = 1.000000` | **통과 기준** |
