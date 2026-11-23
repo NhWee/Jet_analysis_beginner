@@ -45,10 +45,12 @@
 Jet_analysis_beginner/
 ├── README.md                 셋업과 실행 순서. 신규 진입자의 첫 페이지
 ├── environment.yml           conda 환경 정의 (전체: Pythia, PyTorch 포함)
-├── requirements.txt          pip 최소 환경 (toy 파이프라인, 노트북, 테스트)
-├── requirements-lock.txt     문서 수치를 만든 정확한 버전
+├── requirements.txt          pip 환경 (버전 고정, CI 가 사용, GUIDE 의 모든 스크립트)
+├── requirements-lock.txt     toy 스택의 pip freeze (tier 문서 수치를 만든 정확한 버전)
 ├── Dockerfile                재현용 컨테이너
 ├── docs/
+│   ├── GUIDE.md              따라 하기 가이드 (설치 → 실데이터, 단계별 의미)
+│   ├── ROADMAP.md            보완 사항과 다음 단계, 진행 상황
 │   ├── WORKFLOW.md           ← 지금 이 문서
 │   ├── data_tiers.md         티어별로 무엇이 가능한지 (메커니즘)
 │   ├── tier_physics_programme.md  티어별로 무엇을 측정할 수 있는지 (물리)
@@ -57,13 +59,15 @@ Jet_analysis_beginner/
 │   ├── jeteec/               재사용 라이브러리 (jets, eec, stats, kinematics, plot)
 │   ├── toy_generator.py      의존성 없는 대체 샘플 생성기 (truth 기록 포함)
 │   ├── validate_eec_pythia.py  실데이터 전 필수 검증
+│   ├── analyze_mod.py        첫 실데이터 EEC (CMS 2011A MOD)
+│   ├── analyze_mod_sim.py    MOD SIM 으로 검출기 효과 점검 (같은 jet 의 reco vs gen)
 │   ├── make_sample.py        노트북용 연습 ROOT 파일
 │   ├── inspect_file.py       ROOT 파일 내용 확인 — 새 파일은 항상 이것부터
 │   ├── tier_demo.py          티어별 가능/불가능 비교
 │   └── tier_analyses.py      티어별 실제 분석 4종
 ├── tests/                    단위·closure·문서 수치·노트북 테스트 (pytest)
 ├── data/                     내용은 커밋하지 않음. sample register 만 기록
-├── results/figures|tables/   그림·표. 커밋하지 않음 — 단 문서가 참조하는 tier_*.png 는 예외
+├── results/figures|tables/   그림·표. 커밋하지 않음 — 단 문서가 참조하는 그림(tier_*, eec_pythia_*, eec_mod2011_*)은 예외
 ├── models/                   체크포인트. 커밋하지 않음
 └── notebooks/                튜토리얼·탐색용. 커밋 전 output 제거
 ```

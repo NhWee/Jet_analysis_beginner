@@ -104,3 +104,25 @@ def test_as_particles_needs_mass_or_energy():
     with pytest.raises(ValueError):
         jets_mod.as_particles(pt, pt, pt)
     assert np.isclose(jets_mod.as_particles(pt, pt * 0, pt * 0, mass=pt * 0).pt[0, 0], 1.0)
+
+
+# ---- merged from claude/awesome-fermi-hoya8y ---------------------------------
+
+def test_cluster_ignores_extra_fields(toy_particles):
+    """Passing records with ``charge`` must give the same jets as stripped records.
+
+    Extra fields are carried through; they must not change the clustering."""
+    j1, c1 = jets_mod.cluster(toy_particles)
+    j2, c2 = jets_mod.cluster(jets_mod.four(toy_particles))
+    np.testing.assert_allclose(ak.to_numpy(ak.flatten(j1.pt)), ak.to_numpy(ak.flatten(j2.pt)))
+    assert ak.all(ak.num(c1, axis=2) == ak.num(c2, axis=2))
+
+
+def test_leading_keeps_hardest(toy_particles):
+    cfg = jets_mod.JetConfig(min_pt=20, max_abs_eta=10)
+    jets, const = jets_mod.cluster(toy_particles, cfg)
+    lj, lc = jets_mod.leading(jets, const, 2)
+    assert ak.all(ak.num(lj) <= 2)
+    assert ak.all(ak.num(lj) == ak.num(lc))
+    top = ak.sort(jets.pt, axis=1, ascending=False)[:, :2]
+    np.testing.assert_allclose(ak.to_numpy(ak.flatten(lj.pt)), ak.to_numpy(ak.flatten(top)))

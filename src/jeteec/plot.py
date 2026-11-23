@@ -55,6 +55,23 @@ def log_pt_axis(ax: "plt.Axes", ticks=(100, 200, 300, 500, 1000)) -> None:
     ax.xaxis.set_minor_formatter(NullFormatter())
 
 
+def log_band(values: np.ndarray, errors: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Lower/upper edges of a +-1 sigma band that stay positive on a log axis.
+
+    A lower edge at or below zero drags a log axis down to ~1e-18 and hides the data, so it
+    is clipped to a tenth of the central value.
+    """
+    lo = np.where(values - errors > 0, values - errors, 0.1 * values)
+    return lo, values + errors
+
+
+def fit_log_ylim(ax: "plt.Axes", *arrays: np.ndarray, pad: float = 3.0) -> None:
+    """Set log y-limits from the positive entries of the given arrays."""
+    pos = np.concatenate([np.asarray(a)[np.asarray(a) > 0] for a in arrays])
+    if pos.size:
+        ax.set_ylim(pos.min() / pad, pos.max() * pad)
+
+
 def save(fig: "plt.Figure", path: str, dpi: int = 300) -> None:
     """Save a figure with tight bounding box (PDF for papers, PNG for notes)."""
     fig.savefig(path, dpi=dpi, bbox_inches="tight")

@@ -149,3 +149,14 @@ def subjets(constituents: ak.Array, algorithm: str = "kt", R: float = 0.2) -> ak
     jetdef = JetConfig(algorithm=algorithm, R=R).definition()
     seq = fastjet.ClusterSequence(clusterable(constituents), jetdef)
     return seq.inclusive_jets()
+
+
+def leading(jets: ak.Array, constituents: ak.Array, n: int):
+    """Keep the ``n`` highest-pT jets per event (and their constituents).
+
+    Use this *before* kinematic cuts to reproduce a "two hardest jets in the event, then
+    pT/eta cuts" selection, as in the CMS 2011A MOD dataset. (:func:`cluster` already sorts
+    by pT; sorting again here keeps this correct for any input order.)
+    """
+    order = ak.argsort(jets.pt, axis=1, ascending=False)[:, :n]
+    return jets[order], constituents[order]

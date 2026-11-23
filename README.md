@@ -17,12 +17,19 @@ validates each step on synthetic events first.
        alt="Fragmentation function, constituent multiplicity, girth/pTD, and the EEC, computed from toy events">
 </p>
 
-> **Status: the pipeline is built and validated on synthetic events; no open data
-> has been analysed yet.** Every number below comes from `src/toy_generator.py`,
-> which has no matrix element, no parton shower and no hadronisation. It is a
-> pipeline test, not a measurement. What it *does* establish is that the
-> clustering, the correlator and its normalisation are correct before any real
-> data is touched.
+> **Status: the pipeline is validated on synthetic events and on Pythia 8 truth,
+> and has had a first look at open data** (CMS 2011A MOD, 3 of 18 files, 284059 jets,
+> [`docs/mod_data_results.md`](docs/mod_data_results.md)): detector-level data against
+> generator-level Pythia, no unfolding, no systematics. The tier numbers below come from
+> `src/toy_generator.py`, which has no matrix element, no parton shower and no
+> hadronisation. The Pythia run ([`docs/pythia_validation_results.md`](docs/pythia_validation_results.md))
+> passes the normalisation check and shows the expected physics: the small-angle
+> EEC scales with $1/p_T$ and disappears when hadronisation is switched off.
+> Neither is a measurement.
+
+> **New here? Follow the walkthrough: [English](docs/GUIDE.en.md) / [한국어](docs/GUIDE.md)**. A step-by-step walkthrough
+> from installation to the first real-data EEC, explaining what each script does internally
+> and what its output means, with the exact numbers you should reproduce.
 
 ---
 
@@ -56,23 +63,29 @@ them ([`requirements-lock.txt`](requirements-lock.txt)).
 ## Quick start
 
 ```bash
-# environment (Miniforge/mamba): the full stack, Pythia and PyTorch included
+# environment: pip (verified; every script in docs/GUIDE.md) ...
+python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
+# ... or conda (Miniforge/mamba): the full stack, PyTorch included
 mamba env create -f environment.yml
 conda activate jet-eec
-# ...or just the toy pipeline, notebook and tests, with pip:
-#   pip install -r requirements.txt        (add pythia8mc for step 1)
 
-# 0. do the unit, closure and documented-number tests pass?
-pytest
+# 0. do the unit, closure and documented-number tests pass? (seconds)
+python -m pytest -q
 
 # 1. is the pipeline correct?  -- run this FIRST, before any open data
 python src/validate_eec_pythia.py --n-events 2000 --seed 12345
+#    add --compare-hadronisation for the parton- vs hadron-level comparison
+#    --preset mod2011 matches the CMS 2011A MOD dataset (7 TeV, R=0.5, pT>375 GeV)
 
 # 2. which data tier do I actually need?
 python src/tier_demo.py --n-events 400 --seed 12345
 
 # 3. one real analysis per tier
 python src/tier_analyses.py --n-events 2000 --seed 12345
+
+# 4. first real data: CMS 2011A MOD (downloads ~111 MB per file from zenodo.org)
+python src/validate_eec_pythia.py --preset mod2011 --n-events 40000 --seed 12345
+python src/analyze_mod.py --n-files 1
 ```
 
 Step 1 generates Pythia dijets, clusters anti-$k_T$ $R = 0.4$ jets, and checks that
@@ -89,6 +102,8 @@ docker build -t jet-eec .
 docker run -it --rm -p 8888:8888 -v "$PWD":/work jet-eec   # http://localhost:8888
 ```
 
+What to fix next and the staged plan toward real data are in [`docs/ROADMAP.md`](docs/ROADMAP.md).
+
 Working conventions -- commit rules, what goes to Notion versus GitHub, the
 reasoning behind past decisions -- are in [`docs/WORKFLOW.md`](docs/WORKFLOW.md).
 
@@ -100,7 +115,7 @@ reasoning behind past decisions -- are in [`docs/WORKFLOW.md`](docs/WORKFLOW.md)
 flowchart TD
     G1["<b>synthetic events</b><br/><code>toy_generator.py</code><br/>no dependencies"]
     G2["<b>Pythia 8 truth</b><br/><code>validate_eec_pythia.py</code><br/>full generator"]
-    G3["<b>LHC Open Data</b><br/>uproot / xrootd<br/><i>not yet used</i>"]
+    G3["<b>LHC Open Data</b><br/>CMS 2011A MOD, <code>analyze_mod.py</code><br/><i>first look, pre-clustered R=0.5 jets</i>"]
 
     C["<b>jet clustering</b><br/><code>jeteec/jets.py</code><br/>fastjet, anti-kT R=0.4"]
     E["<b>correlator + substructure</b><br/><code>jeteec/eec.py</code><br/>EEC, girth, pTD, D(z)"]
@@ -111,7 +126,7 @@ flowchart TD
 
     G1 --> C
     G2 --> C
-    G3 -.-> C
+    G3 --> E
     C --> E
     E --> D1
     E --> D2
@@ -121,9 +136,10 @@ flowchart TD
 ```
 
 Dashed edges are not built yet. The point of the layout is that **the event source
-is interchangeable**: toy, Pythia truth and real constituents all enter the same
-clustering call, so the pipeline can be validated where the answer is known and
-then pointed at data without changing the analysis code.
+is interchangeable**: toy and Pythia truth enter the same clustering call, and the
+MOD open data (already clustered, R = 0.5) enter the same EEC call, so the pipeline
+can be validated where the answer is known and then pointed at data without
+changing the analysis code.
 
 ---
 
@@ -190,7 +206,10 @@ and they are computed alongside the EEC as cross-checks:
 
 Convention note: papers differ on EEC normalisation and pair counting. The choices
 made here are stated explicitly at the top of `src/jeteec/eec.py` -- worth reading
-before comparing any number against the literature.
+before comparing any number against the literature. `norm="jet_pt"` switches to
+the CMS convention. When comparing samples with different constituent
+multiplicity, compare shapes normalised to a common range: the self-pair weight
+$\sum_i z_i^2$ at $\Delta R = 0$ differs between them and shifts every visible bin.
 
 References: for energy correlators measured inside jets on CMS Open Data --
 the closest published analogue of this project -- Komiske, Moult, Thaler, Zhu,
@@ -330,11 +349,11 @@ pseudorapidity, which matters for soft massive particles. Details in
 ## Repository layout
 
 ```
-environment.yml, Dockerfile     full env definition and reproducible container
-requirements.txt                minimal pip env (toy pipeline, notebook, tests)
-requirements-lock.txt           exact versions behind the documented numbers
+environment.yml, Dockerfile     full conda env definition and reproducible container
+requirements.txt                pinned pip environment (verified, used by CI)
+requirements-lock.txt           full pip freeze of the toy stack behind the tier numbers
 src/jeteec/jets.py              clustering wrapper (fastjet, awkward), with the layout guard
-src/jeteec/eec.py               EEC, per-jet statistical errors, normalisation check
+src/jeteec/eec.py               EEC (+ stat. errors, per-jet histograms, pT slices, chunking) + normalisation check
 src/jeteec/stats.py             unbiased estimators for closure tests
 src/jeteec/kinematics.py        delta-phi / delta-R, four-vector sums
 src/jeteec/plot.py              mplhep styling
@@ -344,7 +363,9 @@ src/make_sample.py              writes the practice ROOT file the notebook reads
 src/inspect_file.py             lists what a ROOT file contains -- run on any new file
 src/tier_demo.py                what each data tier can and cannot do
 src/tier_analyses.py            one real analysis per tier
-tests/                          unit, closure, documented-number and notebook tests
+src/analyze_mod.py              first real-data EEC (CMS 2011A MOD)
+src/analyze_mod_sim.py          detector check with MOD SIM (same-jet reco vs gen)
+tests/                          unit, closure, documented-number and notebook tests; CI in .github/workflows/tests.yml
 notebooks/                      tutorials and exploration (strip outputs before committing)
 data/raw|interim|processed/     not committed; see data/README.md
 results/figures|tables/          outputs; the tier_*.png are committed for the docs

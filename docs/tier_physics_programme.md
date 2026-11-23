@@ -28,6 +28,12 @@ Practical consequence: **any EEC analysis on CMS Open Data requires CMSSW at lea
 Either you analyse MiniAOD directly inside CMSSW, or you use CMSSW once to convert MiniAOD →
 PFNano and then work in pure Python forever after. The second is almost always better.
 
+> **Exception (added 2026-11-05):** for **Run 1 (2011A) data** there is a public reprocessing
+> that already carries PF candidates and needs no CMSSW: the MOD HDF5 `CMS2011AJets` collection
+> ([10.5281/zenodo.3340205](https://doi.org/10.5281/zenodo.3340205), read with `energyflow`).
+> It is fixed at anti-kT R = 0.5 and jet pT > 375 GeV. The statement above still holds for
+> Run 2 data and for any other R or pT range. Details in [ROADMAP.md](ROADMAP.md) §B stage 3.
+
 Size scaling: NanoAOD is roughly **20× smaller than MiniAOD** and **200× smaller than AOD**.
 
 ---
