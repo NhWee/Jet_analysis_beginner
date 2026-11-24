@@ -104,7 +104,7 @@ def generate(n_events: int, seed: int, pthat_min: float, ecm: float,
         if not pythia.next():
             continue
         weights.append(_info(pythia).weight())
-        pt, eta, phi, m = [], [], [], []
+        pt, eta, phi, m, q = [], [], [], [], []
         for p in pythia.event:
             # final-state, visible, within tracker-like acceptance
             # partons are "final" but not "visible" when hadronisation is off
@@ -116,11 +116,15 @@ def generate(n_events: int, seed: int, pthat_min: float, ecm: float,
             eta.append(p.eta())
             phi.append(p.phi())
             m.append(p.m())
-        events.append({"pt": pt, "eta": eta, "phi": phi, "mass": m})
+            q.append(p.charge())
+        events.append({"pt": pt, "eta": eta, "phi": phi, "mass": m, "charge": q})
 
     arr = ak.Array(events)
     w = np.asarray(weights, dtype=float)
-    return jets_mod.as_particles(arr.pt, arr.eta, arr.phi, mass=arr.mass), w / w.mean()
+    parts = jets_mod.as_particles(arr.pt, arr.eta, arr.phi, mass=arr.mass)
+    # charge rides along as an extra field (clustering ignores it, constituents keep it)
+    parts = ak.with_field(parts, arr.charge, "charge")
+    return parts, w / w.mean()
 
 
 PT_EDGES = (100.0, 150.0, 200.0, 300.0, 500.0)
@@ -181,6 +185,12 @@ def main() -> int:
     ap.add_argument("--bias-ref", type=float, default=None, help="GeV")
     ap.add_argument("--pt-edges", type=float, nargs="+", default=list(PT_EDGES))
     ap.add_argument("--tag", default="", help="suffix for output figure names")
+    ap.add_argument("--charged-only", action="store_true",
+                    help="EEC of charged constituents only (jets are still clustered from all "
+                         "visible particles, as in the MOD data)")
+    ap.add_argument("--const-pt-min", type=float, default=0.0,
+                    help="EEC of constituents with pT above this [GeV] only (e.g. 1 GeV, "
+                         "as in arXiv:2201.07800 and arXiv:2402.13864)")
     ap.add_argument("--preset", choices=sorted(PRESETS),
                     help="set all of the above to a named configuration")
     args = ap.parse_args()
@@ -219,6 +229,17 @@ def main() -> int:
     print(f"      closure: max |sum(constituents) - jet| / jet pT = {closure:.1e} "
           f"(expect ~1e-15)")
     closure_ok = closure < 1e-9
+
+    if args.charged_only or args.const_pt_min > 0:
+        keep = const_flat.pt >= args.const_pt_min
+        if args.charged_only:
+            keep = keep & (const_flat.charge != 0)
+        const_flat = const_flat[keep]
+        has = ak.to_numpy(ak.num(const_flat)) > 0
+        jets_flat, const_flat, jw = jets_flat[has], const_flat[has], jw[has]
+        print(f"      EEC particles: charged_only={args.charged_only}, pT >= "
+              f"{args.const_pt_min} GeV; <n> = {wmean(ak.num(const_flat), jw):.1f}, "
+              f"{int((~has).sum())} jets left without particles (dropped)")
 
     print(f"[3/{n_steps}] computing EEC ...")
     norm = eec_mod.normalisation_check(const_flat, chunk_size=args.chunk_size)
