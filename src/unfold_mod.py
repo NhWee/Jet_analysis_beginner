@@ -17,8 +17,8 @@ Each jet goes to one of ``N_GROUPS`` random sub-samples, so the response can be 
 (closure) and resampled (its statistical uncertainty).
 
 Usage (inputs as in docs/mod_sim_results.md; per-file results cached in data/interim/unfold/):
-  python src/validate_eec_pythia.py --preset mod2011 --n-events 200000 --seed 12345 \
-      --charged-only --const-pt-min 1 --tag mod2011_ch1
+  for s in 12345 12346 12347 12348; do python src/validate_eec_pythia.py --preset mod2011 \
+      --n-events 50000 --seed $s --charged-only --const-pt-min 1 --tag mod2011_ch1_s$s; done
   python src/unfold_mod.py --files SIM170:1 SIM300:6 SIM470:6 SIM600:5 SIM800:3 SIM1000:2 \
       SIM1400:2 SIM1800:2 --data-files 3
 """
@@ -316,16 +316,26 @@ def mean_reco_pt(D):
                      for k in range(4)])
 
 
-def pythia8_shapes(path):
-    """Pythia 8 per-slice shapes, errors (Gaussian from the SEM) and <pT> from its table."""
-    py = np.load(path)
-    if not np.allclose(py["edges"], BINS):
-        raise ValueError("Pythia 8 table has a different R_L binning")
-    lo = list(py["slice_lo"])
-    idx = [lo.index(e) for e in PT_EDGES[:-1]]
-    v = py["slice_values"][idx]
-    e = py["slice_errors"][idx]
-    return v, e, py["slice_mean_pt"][idx], py["slice_n_eff"][idx]
+def pythia8_shapes(paths):
+    """Pythia 8 per-slice EEC, errors (SEM), <pT> and n_eff, averaged over independent runs.
+
+    Several equal-size runs (different seeds) are averaged with equal weight; the error of the
+    mean is sqrt(sum sigma^2) / n_runs. (One 200k-event run does not fit in memory.)
+    """
+    vs, es, pts, ns = [], [], [], []
+    for path in paths:
+        py = np.load(path)
+        if not np.allclose(py["edges"], BINS):
+            raise ValueError("Pythia 8 table has a different R_L binning")
+        lo = list(py["slice_lo"])
+        idx = [lo.index(e) for e in PT_EDGES[:-1]]
+        vs.append(py["slice_values"][idx])
+        es.append(py["slice_errors"][idx])
+        pts.append(py["slice_mean_pt"][idx])
+        ns.append(py["slice_n_eff"][idx])
+    n = len(vs)
+    return (np.mean(vs, axis=0), np.sqrt(np.sum(np.square(es), axis=0)) / n,
+            np.mean(pts, axis=0), np.sum(ns, axis=0))
 
 
 def choose_iterations(t_all, boot_all, n_max):
@@ -523,7 +533,7 @@ def _tojson(x):
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--files", nargs="+", required=True, help="SIM slices as NAME:N_FILES")
+    ap.add_argument("--files", nargs="+", help="SIM slices as NAME:N_FILES (required to analyse)")
     ap.add_argument("--data-files", type=int, default=3)
     ap.add_argument("--n-boot", type=int, default=100, help="data bootstrap replicas")
     ap.add_argument("--n-boot-resp", type=int, default=50, help="response-group resamples")
@@ -531,14 +541,18 @@ def main() -> int:
     ap.add_argument("--n-iter-max", type=int, default=20)
     ap.add_argument("--seed", type=int, default=2026)
     ap.add_argument("--workers", type=int, default=4)
-    ap.add_argument("--pythia-ch1", default=str(REPO / "results" / "tables"
-                                                / "eec_pythia_mod2011_ch1.npz"))
+    ap.add_argument("--pythia-ch1", nargs="+", default=[
+        str(REPO / "results" / "tables" / f"eec_pythia_mod2011_ch1_s{s}.npz")
+        for s in (12345, 12346, 12347, 12348)],
+        help="Pythia 8 charged pT > 1 GeV tables (averaged)")
     ap.add_argument("--process-only", nargs="+", help="just fill the cache for these files")
     args = ap.parse_args()
     if args.process_only:
         for f in args.process_only:
             print(process_file(f))
         return 0
+    if not args.files:
+        ap.error("--files is required")
     rng = np.random.default_rng(args.seed)
 
     print("[1/4] SIM and data -> pair-level response / per-jet histograms (cached) ...")
@@ -558,7 +572,7 @@ def main() -> int:
                      "files": args.files, "mean_gen_pt": mpt_gen, "mean_reco_pt": mpt_reco,
                      "matching": {v: S[f"{v}_frac"] for v in VARIANTS}}
     py8 = None
-    if pathlib.Path(args.pythia_ch1).exists():
+    if all(pathlib.Path(x).exists() for x in args.pythia_ch1):
         py8 = pythia8_shapes(args.pythia_ch1)
         p8s = np.array([eec_mod.shape(x, BINS) for x in py8[0]])
         summary["pythia8_hr"] = half_rises(p8s, py8[2])
