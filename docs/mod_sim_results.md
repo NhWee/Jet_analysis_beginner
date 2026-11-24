@@ -214,6 +214,11 @@ default), not a detector effect. It is not cleanly a tune statement yet, because
 definitions may differ. The MOD gens have K0S and Λ decayed (arXiv:1908.08542 §II.4), and the
 stable-particle definition of the Pythia 8 baseline was not cross-checked against them.
 
+*Checked later (2026-11-24, [mod_unfolding_results.md](mod_unfolding_results.md)):* the
+definitions agree for the species that matter. Pythia 8.318 by default decays K0S, Λ, Σ±, Ξ and
+Ω (`mayDecay` true, `ParticleDecays:limitTau0` off) and keeps K0L and n stable. The SIM170
+file-0 gen list contains e, μ, γ, π±, K±, p, K0L and n, and none of those hyperons.
+
 ---
 
 ## Jet quality (`quality`)
@@ -255,5 +260,15 @@ stable-particle definition of the Pythia 8 baseline was not cross-checked agains
 - **Pythia 8 vs SIM-gen are not like-for-like** in stable-particle definition (see above) or jet
   pT. SIM-gen uses reco-selected jets binned in reco pT (or gen pT), while Pythia 8 selects on the
   truth jet. The truth-level comparison is indicative.
-- **No unfolding.** SIM shows that the three data features are mostly detector effects. Comparing
-  with theory or with arXiv:2201.07800 needs an unfolding built from these same reco/gen pairs.
+- **No unfolding on this page.** SIM shows that the three data features are mostly detector
+  effects.
+
+## Next step: done
+
+The unfolding built from these same reco/gen pairs is in
+[mod_unfolding_results.md](mod_unfolding_results.md). It covers charged particles with
+pT > 1 GeV, a pair-level response with particle matching, and D'Agostini in (jet pT × R_L).
+- **Observation 3 at particle level.** After unfolding, the half-rise R_L·⟨pT⟩ is
+  2.84 / 2.79 / 2.75 / 2.47 GeV. The fixed R_L·pT scale is recovered in data.
+- **Residual of observation 2.** The large-angle excess survives as unfolded data / Pythia 6 =
+  1.10–1.16.

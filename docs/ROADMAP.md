@@ -1,13 +1,13 @@
 # 보완 사항과 다음 단계 (Roadmap)
 
 2026-11 기준 저장소 상태를 점검한 결과다.
-**현재 위치 (2026-11-22 갱신): 파이프라인은 toy 와 Pythia truth 로 검증됐고, 첫 실데이터 EEC (CMS 2011A MOD, 검출기 수준, unfolding 없음)를 Pythia 기준선과 비교했다. MOD SIM 으로 data/Pythia 차이 세 가지가 주로 검출기 효과임을 확인했다.**
+**현재 위치 (2026-11-24 갱신): 파이프라인은 toy 와 Pythia truth 로 검증됐고, 첫 실데이터 EEC (CMS 2011A MOD) 의 data/Pythia 차이 세 가지가 주로 검출기 효과임을 MOD SIM 으로 확인했다. charged 입자(pT > 1 GeV) EEC 를 입자 수준으로 unfolding 했다 (closure·stress test 통과, 체계 오차 포함).**
 
 ## 진행 상황
 
 | # | 상태 | 비고 |
 |---|---|---|
-| A1 테스트 | ✅ | `tests/` 39개, 수 초 내. `python -m pytest -q tests` |
+| A1 테스트 | ✅ | `tests/` 88개, 약 15초. `python -m pytest -q tests` |
 | A2 CI | ✅ | `.github/workflows/tests.yml`: pytest + toy tier 분석 + Pythia 검증(소규모) |
 | A3 lock 파일 | ✅ | pip: `requirements.txt`. conda: `environment.lock.yml` (linux-64, micromamba 로 생성 후 그 파일로 새 환경을 만들어 검증). conda 경로 검증 중 Python 3.11 numpy 다운그레이드와 conda-forge Pythia 버전 차이를 찾아 수정 |
 | A4 Pythia 검증 | ✅ | PASS, 결과는 [pythia_validation_results.md](pythia_validation_results.md). sample register P8-001/002 |
@@ -41,7 +41,14 @@ MOD SIM 검출기 점검 (단계 3a, SIM 파일 27/355, 2587771 jet, n_eff 74213
 - SIM-gen / Pythia 8 (Pythia 6 Z2 vs 8): 작은 각도 1.24, 큰 각도 0.88
 - k-factor·npv 재가중은 모든 비를 ≤ 0.008 바꾼다
 
-다음 할 일: 같은 SIM reco/gen 쌍으로 unfolding (bin-by-bin 보정 → 반복 Bayesian) → arXiv:2201.07800 과 비교. 남은 데이터/SIM 잔여 (작은 각도 중성 9%, 큰 각도 9%) 의 계통 오차 평가.
+입자 수준 보정 (단계 4 의 첫 부분, charged 입자 pT > 1 GeV): ✅ 결과는 [mod_unfolding_results.md](mod_unfolding_results.md).
+- 방법: 입자 매칭(같은 전하, dR < 0.05, 가장 가까운 pT; CMS arXiv:2402.13864 규칙)으로 만든 쌍 단위 응답, (jet pT × R_L) 2D D'Agostini, 반복 n = 2 (연속 반복 p > 0.05 규칙). bin-by-bin 과 half-rise 가 0.06 GeV 안에서 일치
+- 검증: SIM 반쪽 → 다른 반쪽 closure (무작위 분할 30회) 평균 편향 ≤ 0.2%. Pythia 8 모양으로 재가중한 가짜 데이터 stress test 편향은 R_L < 0.01 에서 1–3%, 그 밖에서 < 0.5% (체계 오차로 포함)
+- **핵심: 보정 후 half-rise R_L·⟨pT⟩ = 2.84 / 2.79 / 2.75 / 2.47 GeV** (검출기 수준 3.55 → 4.92). 700–1000 / 375–450 비 0.868 ± 0.036 ± 0.036 (고정 R_L 이면 1.92, Pythia 6 0.917, Pythia 8 0.914) → 입자 수준에서 R_L·pT scaling 회복
+- 데이터는 작은 각도에서 Pythia 6 Z2 와 맞고 Pythia 8.318 보다 17–21% 많다. 큰 각도(0.1–0.5)는 Pythia 6 보다 1.10–1.16 배 (보정 후에도 남음), Pythia 8 과는 0.97–0.98
+- 체계 오차: prior(Pythia 6→8), stress-test 편향, 추적 효율 3%, JES ±3%, JER +10%, 응답 통계, 375 GeV 아래로 빠진 jet, 반복 수. 평가 못 함: 응답 자체의 모형 의존성(검출기 시뮬레이션된 생성기가 하나뿐), 두 트랙 분리 오모델링(검출기 수준 data/SIM-reco 0.98–1.00 으로 간접 한정), 2011 고유 JES/JER 값
+
+다음 할 일: arXiv:2201.07800 과 같은 조건(500–550 GeV, 검출기 수준)의 직접 비교, 정규화 규약 맞추기. jet pT 스펙트럼까지 unfolding 해서 jet 당 절대 정규화. 큰 각도 data/Pythia 6 잔여(1.10–1.16)의 원인.
 
 판단 근거와 진행 기록은 Notion 연구 허브에 남긴다 ([WORKFLOW.md](WORKFLOW.md) §4).
 이 문서는 "무엇을, 어떤 순서로, 무엇이 되면 끝인가" 만 적는다.
@@ -116,8 +123,8 @@ A1 이 있어야 A5~A8 을 고칠 때 기존 결과가 깨지지 않았음을 �
 (2026-11-05: 정규화 = 1 은 충족. 2201.07800 과의 형태 비교는 아직이다. 그쪽은 unfolding 된 결과라 SIM 단계 뒤에 한다.)
 
 ### 단계 4 — 측정다운 측정
-- 검출기 효과 보정: Pythia + 검출기 시뮬레이션(또는 공개 MC)으로 unfolding
-- 체계 오차: JES/JER, 트래킹 효율(charged-only EEC), pileup
+- ~~검출기 효과 보정: Pythia + 검출기 시뮬레이션(또는 공개 MC)으로 unfolding~~ ✅ MOD SIM (Pythia 6) 으로 charged EEC, [mod_unfolding_results.md](mod_unfolding_results.md)
+- 체계 오차: JES/JER, 트래킹 효율(charged-only EEC) ✅ (크기는 2011 고유값 아님). pileup 변동 미평가
 - E3C/E2C 비율로 αs 추출 시도 (CMS 결과 재현이 목표)
 
 ### 단계 5 — 딥러닝
@@ -133,3 +140,4 @@ A1 이 있어야 A5~A8 을 고칠 때 기존 결과가 깨지지 않았음을 �
 3. ~~CMS 2011A MOD 데이터셋 접근 가능 여부 확인 (단계 3a)~~ ✅ 공개 확인
 4. ~~MOD 파일 받아 첫 실데이터 EEC~~ ✅ 파일 3개, [mod_data_results.md](mod_data_results.md)
 5. ~~MOD SIM 샘플로 같은 분석 (검출기 효과 분리)~~ ✅ 파일 27개, [mod_sim_results.md](mod_sim_results.md)
+6. ~~SIM reco/gen 쌍으로 unfolding~~ ✅ charged pT > 1 GeV, [mod_unfolding_results.md](mod_unfolding_results.md)

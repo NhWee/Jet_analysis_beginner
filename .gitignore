@@ -38,6 +38,11 @@ results/**
 !results/figures/eec_mod2011_sim_shapes.png
 !results/figures/eec_mod2011_sim_neutral_hadrons.png
 !results/figures/eec_mod2011_sim_pt_slices.png
+# Unfolding figures, referenced from docs/mod_unfolding_results.md
+!results/figures/eec_mod2011_unfolded_charged.png
+!results/figures/eec_mod2011_unfolded_halfrise.png
+!results/figures/eec_mod2011_unfolding_validation.png
+!results/figures/eec_mod2011_unfolding_uncertainties.png
 
 # ---- Notebooks: commit source, not outputs ----
 .ipynb_checkpoints/
