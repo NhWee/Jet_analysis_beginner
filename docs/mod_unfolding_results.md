@@ -30,7 +30,7 @@ Curves: `results/tables/eec_mod2011_unfolded.npz`.
 **Reproduced in this container first.** The data run (`analyze_mod.py --n-files 3`) gives exactly
 the documented numbers: 284059 jets, data/Pythia 8 shape ratios 0.58 / 0.91 / 1.32, and half-rise
 2.94 / 3.25 / 3.67 / 4.57 GeV. The Pythia 8 baseline (seed 12345, 40000 events) also matches. The
-SIM run reproduces the documented table (see [Reproduction](#reproduction)).
+SIM run reproduces the documented table to the last digit (see [Reproduction](#reproduction)).
 
 ---
 
@@ -400,10 +400,8 @@ loss and iterations. Not evaluated: prior, tracking, and **neutral energy scale*
 | data, `analyze_mod.py --n-files 3` | 284059 jets, 0.58 / 0.91 / 1.32, half-rise 2.94 / 3.25 / 3.67 / 4.57 GeV: identical to mod_data_results.md |
 | Pythia 8, `--preset mod2011 --n-events 40000 --seed 12345` | PASS (as before) |
 | Pythia 8 charged pT > 1 GeV, 4 × 50000 events, seeds 12345–12348 | PASS each. ⟨n⟩ 17.9–18.2 charged particles per jet. n_eff per pT bin 15454 / 12335 / 9314 / 6223 (sum of 4) |
-| SIM, `analyze_mod_sim.py` (27 files, bootstrap seed 2026) | see the note below |
+| SIM, `analyze_mod_sim.py` (27 files, bootstrap seed 2026) | 2587771 jets, n_eff 742139. data/SIM-reco 0.906 / 0.950 / 1.091, SIM-reco/SIM-gen 0.520 / 0.946 / 1.377, charged data/SIM-reco 0.992 / 0.950 / 1.087, half-rise data 2.94 → 4.57 and SIM-gen 2.35 → 2.14 GeV: identical to mod_sim_results.md (19.6 min on 2 cores) |
 | this page, `unfold_mod.py` (seed 2026, 100 data replicas, 50 response resamples, 30 splits) | numbers above |
-
-<!-- SIM_REPRO -->
 
 A single 200k-event Pythia 8 run was killed for lack of memory (15 GB, shared with the SIM
 processing). Four equal-size runs are averaged instead, with error √(Σσ²)/4.
