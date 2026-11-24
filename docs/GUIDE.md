@@ -29,11 +29,12 @@ flowchart LR
     S4 --> S5["5. Pythia 검증<br/>R=0.4"]
     S5 --> S6["6. MOD 조건 기준선<br/>R=0.5"]
     S6 --> S7["7. 실데이터 EEC<br/>CMS 2011A"]
+    S7 --> S8["8. 검출기 보정<br/>SIM + unfolding"]
 ```
 
 1–4 단계는 **흉내낸 데이터(toy)** 로 코드와 개념을 익히는 단계다. 5–6 단계는 **진짜 물리
 모델(Pythia 8)** 로 파이프라인이 맞는지 증명한다. 7 단계에서 처음으로 **실제 충돌 데이터**를
-쓴다. 앞 단계가 통과하지 않으면 다음 단계의 이상한 결과가 코드 탓인지 데이터 탓인지
+쓰고, 8 단계에서 검출기 효과를 보정해 입자 수준 결과를 만든다. 앞 단계가 통과하지 않으면 다음 단계의 이상한 결과가 코드 탓인지 데이터 탓인지
 구분할 수 없으므로 **순서를 건너뛰지 않는다.**
 
 | 단계 | 명령 | 시간 (1코어) | 네트워크 |
@@ -46,6 +47,7 @@ flowchart LR
 | 5 | `validate_eec_pythia.py` | 15초 (2k) ~ 2분 (10k + 비교) | 불필요 |
 | 6 | `validate_eec_pythia.py --preset mod2011` | 6분 | 불필요 |
 | 7 | `analyze_mod.py` | 파일당 다운로드 약 45초 + 분석 약 1분 | **zenodo.org** |
+| 8 | `download_mod.py` → `validate_eec_pythia.py` ×4 → `unfold_mod.py` | 다운로드 약 22분 (6 GB) + Pythia 20분 + 처리 약 25분 (2코어) | **zenodo.org** |
 
 ---
 
@@ -552,18 +554,74 @@ python src/analyze_mod.py --files data/raw/mod/datasets/CMS2011AJets/CMS_Jet300_
 
 ---
 
+## 8. 검출기 보정 — 입자 수준 결과 (unfolding)
+
+7 단계의 차이는 대부분 검출기 효과다 ([mod_sim_results.md](mod_sim_results.md)). MOD 에는 같은
+jet 의 검출기 수준 입자(`pfcs`)와 생성기 수준 입자(`gens`)를 함께 담은 **SIM** 샘플(Pythia 6 +
+CMS GEANT4 시뮬레이션)이 있어서, 그 쌍으로 응답을 만들어 데이터를 입자 수준으로 되돌린다.
+
+```bash
+python src/download_mod.py CMS:3 SIM170:1 SIM300:6 SIM470:6 SIM600:5 SIM800:3 SIM1000:2 \
+    SIM1400:2 SIM1800:2                                       # 30 파일, 약 6 GB, md5 검사
+for s in 12345 12346 12347 12348; do                          # Pythia 8, charged pT > 1 GeV
+  python src/validate_eec_pythia.py --preset mod2011 --n-events 50000 --seed $s \
+      --charged-only --const-pt-min 1 --tag mod2011_ch1_s$s
+done
+python src/unfold_mod.py --files SIM170:1 SIM300:6 SIM470:6 SIM600:5 SIM800:3 SIM1000:2 \
+    SIM1400:2 SIM1800:2 --data-files 3 --workers 2
+```
+
+(Pythia 를 200k 이벤트 한 번에 돌리면 메모리 15 GB 에서 죽는다. 그래서 50k 씩 4번 돌려 평균한다.)
+
+### 무엇을 하나
+
+1. **관측량**: charged 입자(pT > 1 GeV) 의 EEC. 시뮬레이션이 charged 쪽을 더 잘 재현하고, 같은
+   데이터를 분석한 arXiv:2201.07800 도 이 정의를 쓴다.
+2. **입자 매칭**: 같은 전하, ΔR < 0.05, pT 가 가장 가까운 reco 입자 (CMS arXiv:2402.13864 규칙).
+   EEC 는 jet 하나에 쌍이 수백 개인 **쌍 가중** 관측량이라 "사건 하나 = 응답 한 칸" 이 아니다.
+   두 입자가 모두 매칭된 gen 쌍의 reco 상(像)으로 응답을 채운다.
+3. **응답**: (jet pT 구간 × R_L) 2D. reco jet pT 와 gen jet pT 가 다르므로 pT 이동도 응답에 들어간다.
+4. **D'Agostini 반복**: 연속 반복 사이 χ² 의 p 값이 0.05 를 넘으면 멈춘다 (CMS 규칙, 여기서 n = 2).
+5. **검증**: SIM 을 두 반쪽으로 나눠 한쪽 응답으로 다른 쪽을 보정 (closure, 무작위 분할 30회),
+   Pythia 8 모양으로 재가중한 가짜 데이터 보정 (stress test).
+6. **체계 오차**: prior, 추적 효율, JES, JER, 응답 통계, 375 GeV 아래로 빠진 jet, 반복 수.
+
+### 출력 읽는 법
+
+| 줄 | 뜻 |
+|---|---|
+| `matched gen particles 0.822` | charged gen 입자 중 매칭된 비율 (CMS 논문은 80–84%) |
+| `gen pair weight in matched pairs per gen bin` | 높은 pT 의 작은 각도에서 0.4 까지 떨어진다. 그만큼 보정이 크다 |
+| `iterations: chosen n = 2` | 정지 규칙이 고른 반복 수와 χ² |
+| `closure (... 30 random half splits)` | 평균이 0 에 가까워야 통과. ± 는 분할 한 번의 퍼짐 |
+| `stress test` | prior 와 다른 참값을 얼마나 되찾는가. 남은 편향은 체계 오차로 들어간다 |
+| `half-rise R_L*<pT>` | **핵심 숫자.** pT 구간 사이 거의 일정하면 입자 수준에서 R_L·pT scaling |
+
+**결과물:** `results/figures/eec_mod2011_unfolded_charged.png`, `..._unfolded_halfrise.png`,
+`..._unfolding_validation.png`, `..._unfolding_uncertainties.png`, 숫자는
+`results/tables/mod_unfolding_summary.json`. 해석은 [mod_unfolding_results.md](mod_unfolding_results.md).
+
+**통과 기준:** closure 평균 편향 ≤ 0.2%, half-rise 2.84 / 2.79 / 2.75 / 2.47 GeV.
+
+**해석할 때 주의.** 검출기 시뮬레이션된 생성기가 Pythia 6 하나뿐이라 **응답 자체의 모형 의존성은
+평가하지 못한다.** JES ±3%, JER +10% 는 2011 고유 CMS 값이 아니다. 결과는 jet 당 정규화가 아니라
+pT 구간별 단위 면적 모양이다.
+
+---
+
 ## 재현 확인표
 
 seed 12345 로 돌렸을 때 반드시 같아야 하는 숫자다. 하나라도 다르면 환경이나 코드가 바뀐 것이다.
 
 | 단계 | 명령 | 확인할 숫자 |
 |---|---|---|
-| 1 | `pytest -q tests` | `32 passed` |
+| 1 | `pytest -q tests` | `88 passed` |
 | 4 | `tier_analyses.py --n-events 2000` | jets 3237, n 4.85, R₃₂ 0.151, ⟨n_const⟩ 14.8, trimming −18.8% |
 | 5 | `validate_eec_pythia.py --n-events 2000` | 1785 jets, ⟨pT⟩ 139.2, ⟨n_const⟩ 26.8, peak 0.102 |
 | 5 | `... --n-events 10000 --compare-hadronisation` | 9129 jets, 모양 비 1.19 / 0.28 |
 | 6 | `--preset mod2011 --n-events 40000` | 14785 jets (effective 5840), ⟨pT⟩ 447.7 |
 | 7 | `analyze_mod.py --n-files 1` (6단계 표 필요) | 94567 jets, ⟨pT⟩ 448.3, ⟨n_const⟩ 38.6, data/Pythia 0.58 / 0.91 / 1.32 |
+| 8 | `unfold_mod.py` (8단계 입력, seed 2026) | SIM 2587771 jets, n = 2, half-rise 2.844 / 2.785 / 2.749 / 2.468 GeV |
 | 전부 | | `normalisation = 1.000000` |
 
 ---

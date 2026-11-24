@@ -31,11 +31,12 @@ flowchart LR
     S4 --> S5["5. Pythia validation<br/>R=0.4"]
     S5 --> S6["6. MOD-matched baseline<br/>R=0.5"]
     S6 --> S7["7. real-data EEC<br/>CMS 2011A"]
+    S7 --> S8["8. detector correction<br/>SIM + unfolding"]
 ```
 
 Steps 1–4 use **synthetic (toy) events** to learn the code and the concepts. Steps 5–6 use a
 **real physics model (Pythia 8)** to prove the pipeline is correct. Step 7 is the first to use
-**real collision data**. If an earlier step does not pass, a strange result later cannot be
+**real collision data**, and step 8 corrects it for detector effects to give a particle-level result. If an earlier step does not pass, a strange result later cannot be
 attributed to the code or to the data, so **do not skip steps.**
 
 | step | command | time (1 core) | network |
@@ -48,6 +49,7 @@ attributed to the code or to the data, so **do not skip steps.**
 | 5 | `validate_eec_pythia.py` | 15 s (2k) to 2 min (10k + comparison) | none |
 | 6 | `validate_eec_pythia.py --preset mod2011` | 6 min | none |
 | 7 | `analyze_mod.py` | about 45 s download + about 1 min analysis per file | **zenodo.org** |
+| 8 | `download_mod.py` → `validate_eec_pythia.py` ×4 → `unfold_mod.py` | about 22 min download (6 GB) + 20 min Pythia + about 25 min processing (2 cores) | **zenodo.org** |
 
 ---
 
@@ -571,18 +573,86 @@ python src/analyze_mod.py --files data/raw/mod/datasets/CMS2011AJets/CMS_Jet300_
 
 ---
 
+## 8. Detector correction — a particle-level result (unfolding)
+
+Most of the step-7 differences are detector effects ([mod_sim_results.md](mod_sim_results.md)).
+MOD has a **SIM** sample (Pythia 6 + CMS GEANT4 simulation) whose jets carry both the
+detector-level particles (`pfcs`) and the generator-level particles (`gens`). A response is built
+from those pairs, and the data are corrected back to particle level with it.
+
+```bash
+python src/download_mod.py CMS:3 SIM170:1 SIM300:6 SIM470:6 SIM600:5 SIM800:3 SIM1000:2 \
+    SIM1400:2 SIM1800:2                                       # 30 files, about 6 GB, md5-checked
+for s in 12345 12346 12347 12348; do                          # Pythia 8, charged pT > 1 GeV
+  python src/validate_eec_pythia.py --preset mod2011 --n-events 50000 --seed $s \
+      --charged-only --const-pt-min 1 --tag mod2011_ch1_s$s
+done
+python src/unfold_mod.py --files SIM170:1 SIM300:6 SIM470:6 SIM600:5 SIM800:3 SIM1000:2 \
+    SIM1400:2 SIM1800:2 --data-files 3 --workers 2
+```
+
+A single 200k-event Pythia run is killed at 15 GB of memory. That is why there are four
+50k-event runs, which the analysis averages.
+
+### What it does
+
+1. **Observable**: the EEC of charged particles with pT > 1 GeV. The simulation reproduces the
+   charged part better, and arXiv:2201.07800, which analysed the same data, uses this definition.
+2. **Particle matching**: the reco particle of the same charge within ΔR < 0.05 with the closest
+   pT (the rule of CMS arXiv:2402.13864). The EEC is a **pair-weighted** observable with hundreds
+   of pairs per jet, so "one event = one response entry" does not apply. The response is filled
+   with the reco image of gen pairs whose two particles are both matched.
+3. **Response**: 2D in (jet-pT bin × R_L). Reco and gen jet pT differ, so pT migration is part of
+   the response.
+4. **D'Agostini iterations** stop once the p-value of χ² between consecutive iterations exceeds
+   0.05 (the CMS rule; n = 2 here).
+5. **Validation**:
+   - closure: the SIM is split in halves and one half is corrected with the response of the other,
+     over 30 random splits;
+   - stress test: fake data reweighted to the Pythia 8 shape are corrected the same way.
+6. **Systematics**: prior, tracking efficiency, JES, JER, response statistics, jets lost below
+   375 GeV, and number of iterations.
+
+### Reading the output
+
+| line | meaning |
+|---|---|
+| `matched gen particles 0.822` | fraction of charged gen particles that are matched (the CMS paper quotes 80–84%) |
+| `gen pair weight in matched pairs per gen bin` | drops to 0.4 at small angle and high pT, so the correction there is large |
+| `iterations: chosen n = 2` | iterations chosen by the stopping rule, with the χ² values |
+| `closure (... 30 random half splits)` | the mean must be close to 0. The ± is the spread of one split |
+| `stress test` | how well a truth different from the prior is recovered. The remaining bias becomes a systematic |
+| `half-rise R_L*<pT>` | **the key number.** Nearly constant across pT bins means R_L·pT scaling at particle level |
+
+**Outputs**:
+- figures: `results/figures/eec_mod2011_unfolded_charged.png`, `..._unfolded_halfrise.png`,
+  `..._unfolding_validation.png`, `..._unfolding_uncertainties.png`
+- numbers: `results/tables/mod_unfolding_summary.json`
+- interpretation: [mod_unfolding_results.md](mod_unfolding_results.md)
+
+**Pass criteria:** closure mean bias ≤ 0.2%; half-rise 2.84 / 2.79 / 2.75 / 2.47 GeV.
+
+**Interpretation caveats**:
+- Pythia 6 is the only generator with detector simulation in MOD, so the **model dependence of
+  the response itself is not evaluated.**
+- JES ±3% and JER +10% are not 2011-specific CMS values.
+- The result is a unit-area shape per pT bin, not a per-jet normalisation.
+
+---
+
 ## Reproduction checklist
 
 With seed 12345 these numbers must agree. If any differs, the environment or the code changed.
 
 | step | command | numbers to check |
 |---|---|---|
-| 1 | `pytest -q tests` | `32 passed` |
+| 1 | `pytest -q tests` | `88 passed` |
 | 4 | `tier_analyses.py --n-events 2000` | jets 3237, n 4.85, R₃₂ 0.151, ⟨n_const⟩ 14.8, trimming −18.8% |
 | 5 | `validate_eec_pythia.py --n-events 2000` | 1785 jets, ⟨pT⟩ 139.2, ⟨n_const⟩ 26.8, peak 0.102 |
 | 5 | `... --n-events 10000 --compare-hadronisation` | 9129 jets, shape ratios 1.19 / 0.28 |
 | 6 | `--preset mod2011 --n-events 40000` | 14785 jets (effective 5840), ⟨pT⟩ 447.7 |
 | 7 | `analyze_mod.py --n-files 1` (needs the step-6 table) | 94567 jets, ⟨pT⟩ 448.3, ⟨n_const⟩ 38.6, data/Pythia 0.58 / 0.91 / 1.32 |
+| 8 | `unfold_mod.py` (step-8 inputs, seed 2026) | SIM 2587771 jets, n = 2, half-rise 2.844 / 2.785 / 2.749 / 2.468 GeV |
 | all | | `normalisation = 1.000000` |
 
 ---
