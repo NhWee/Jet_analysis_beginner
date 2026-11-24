@@ -338,6 +338,21 @@ def pythia8_shapes(paths):
             np.mean(pts, axis=0), np.sum(ns, axis=0))
 
 
+def smooth_ratio(num, den, rel_err, degree=4):
+    """Smooth reweighting function num/den: polynomial in log R_L fitted to log(num/den).
+
+    The Pythia 8 shapes have bin-to-bin statistical noise (n_eff of a few thousand jets per pT
+    bin). Reweighting with the raw ratio would put that noise into the "true" spectrum of the
+    stress test, which the unfolding cannot reproduce bin by bin. A model change is smooth, so
+    the ratio is fitted (weights 1 / relative error) and the fit is used.
+    """
+    num, den, rel_err = (np.asarray(a, float) for a in (num, den, rel_err))
+    x = np.log(CENTRES)
+    ok = (num > 0) & (den > 0) & np.isfinite(rel_err) & (rel_err > 0)
+    coef = np.polyfit(x[ok], np.log(num[ok] / den[ok]), degree, w=1.0 / rel_err[ok])
+    return np.exp(np.polyval(coef, x))
+
+
 def choose_iterations(t_all, boot_all, n_max):
     """First n >= 2 where p(chi2 between t_n and t_{n-1}) > 0.05, sigma from the bootstrap."""
     rows = []
@@ -364,6 +379,17 @@ def run_variant(S, D, v, args, rng, py8, mean_pt_gen, summary, label):
     nom = Response(S, v)
     d = data_hist(D, v)
     n_max = args.n_iter_max
+    Tm = nom.T.reshape(N_GEN_JET, NR)
+    Mg = S[f"{v}_Mg"].sum(0).reshape(N_GEN_JET, NR)
+    Rr, Mr = nom.R.reshape(N_RECO_JET, NR), nom.M.sum(1).reshape(N_RECO_JET, NR)
+    out["matched_by_gen_bin"] = Mg.sum(1) / Tm.sum(1)
+    out["fake_by_reco_bin"] = 1 - Mr.sum(1) / Rr.sum(1)
+    sm = CENTRES < 0.01
+    out["matched_small_rl"] = Mg[:, sm].sum(1) / Tm[:, sm].sum(1)
+    print(f"  [{v}] gen pair weight in matched pairs per gen bin (<375, 4 bins, >1000): "
+          + " ".join(f"{x:.3f}" for x in out["matched_by_gen_bin"]) + "; R_L < 0.01: "
+          + " ".join(f"{x:.3f}" for x in out["matched_small_rl"])
+          + "; fake fraction per reco bin: " + " ".join(f"{x:.3f}" for x in out["fake_by_reco_bin"]))
     print(f"  [{v}] fake fraction (reco-weighted, all reco bins): "
           f"{1 - nom.M.sum() / nom.R.sum():.3f}; gen weight in matched pairs "
           f"{S[f'{v}_Mg'].sum() / nom.T.sum():.3f}; <eff_j> "
@@ -395,36 +421,50 @@ def run_variant(S, D, v, args, rng, py8, mean_pt_gen, summary, label):
     with np.errstate(divide="ignore", invalid="ignore"):
         C = np.where(sim_reco > 0, sim_gen / sim_reco, 0.0)
     bbb = np.array([eec_mod.shape(x, BINS) for x in reco_shp * C])
+    with np.errstate(divide="ignore", invalid="ignore"):
+        out["data_over_simreco"] = region_means(reco_shp / sim_reco)
+    print(f"  [{v}] detector level, data / SIM-reco per region and reco pT bin: " + " | ".join(
+        "  ".join(f"{x:.3f}" for x in row) for row in out["data_over_simreco"]))
     out.update(bbb=bbb, C=C, sim_gen=sim_gen, sim_reco=sim_reco,
                hr_bbb=half_rises(bbb, mean_pt_gen), hr_sim_gen=half_rises(sim_gen, mean_pt_gen))
 
-    # ---- closure: response from even groups, pseudo-data and truth from odd groups ----
+    # ---- closure: response from one half of the groups, pseudo-data and truth from the other --
+    # A single split is one statistical draw (both halves fluctuate, and the response noise is
+    # amplified by the iterations), so the split is repeated ``n_splits`` times at random:
+    # the mean over splits measures the method bias, the spread the size of one draw.
     even, odd = np.arange(0, N_GROUPS, 2), np.arange(1, N_GROUPS, 2)
     r_even, r_odd = Response(S, v, even), Response(S, v, odd)
     clo = {}
     for n in (1, 2, 3, 4, 6, 8, n_it):
-        u = gen_shapes(r_even.unfold(r_odd.R, n))
         with np.errstate(divide="ignore", invalid="ignore"):
-            clo[n] = u / gen_shapes(r_odd.T)
-    # stat error of the closure ratio: resample the odd groups (truth and reco together)
-    cb = []
-    for _ in range(args.n_boot_resp):
-        g = rng.choice(odd, size=len(odd))
-        ro = Response(S, v, g)
+            clo[n] = gen_shapes(r_even.unfold(r_odd.R, n)) / gen_shapes(r_odd.T)
+    splits, splits_hr = [], []
+    for _ in range(args.n_splits):
+        perm = rng.permutation(N_GROUPS)
+        ra, rb_ = Response(S, v, perm[:N_GROUPS // 2]), Response(S, v, perm[N_GROUPS // 2:])
+        u, tt = gen_shapes(ra.unfold(rb_.R, n_it)), gen_shapes(rb_.T)
         with np.errstate(divide="ignore", invalid="ignore"):
-            cb.append(gen_shapes(r_even.unfold(ro.R, n_it)) / gen_shapes(ro.T))
-    clo_err = np.std(cb, axis=0, ddof=1)
-    out.update(closure=clo[n_it], closure_err=clo_err, closure_by_n=clo)
-    out["closure_regions"] = region_means(clo[n_it] - 1)
-    pulls = (clo[n_it] - 1) / np.where(clo_err > 0, clo_err, np.inf)
-    out["closure_chi2"] = (float(np.sum(pulls**2)), int(np.sum(clo_err > 0)))
-    hr_clo = half_rises(gen_shapes(r_even.unfold(r_odd.R, n_it)), mean_pt_gen)
-    out["closure_hr"] = (hr_clo, half_rises(gen_shapes(r_odd.T), mean_pt_gen))
-    print(f"  [{v}] closure (n={n_it}), mean (unfolded/truth - 1) per region and pT bin:")
+            splits.append(u / tt)
+        splits_hr.append(half_rises(u, mean_pt_gen) - half_rises(tt, mean_pt_gen))
+    splits = np.array(splits)
+    clo_mean, clo_err = np.nanmean(splits, axis=0), np.nanstd(splits, axis=0, ddof=1)
+    reg = np.array([region_means(x - 1) for x in splits])
+    out.update(closure=clo[n_it], closure_err=clo_err, closure_by_n=clo, closure_mean=clo_mean,
+               closure_regions=reg.mean(0), closure_regions_spread=reg.std(0, ddof=1),
+               closure_hr=(np.mean(splits_hr, 0), np.std(splits_hr, 0, ddof=1)))
+    sem = clo_err / np.sqrt(args.n_splits)
+    ok = sem > 0
+    out["closure_chi2"] = (float(np.sum(((clo_mean[ok] - 1) / sem[ok]) ** 2)), int(ok.sum()))
+    print(f"  [{v}] closure (n={n_it}, {args.n_splits} random half splits): mean (unfolded/truth"
+          " - 1) per region ± spread of one split:")
     for k, (lo, hi) in enumerate(zip(PT_EDGES[:-1], PT_EDGES[1:])):
-        print(f"        {lo:.0f}-{hi:.0f}: " + "  ".join(f"{x:+.4f}" for x in out["closure_regions"][k])
-              + f"   half-rise {hr_clo[k]:.3f} vs truth {out['closure_hr'][1][k]:.3f} GeV")
-    print(f"        chi2/ndf of closure pulls: {out['closure_chi2'][0]:.1f}/{out['closure_chi2'][1]}")
+        print(f"        {lo:.0f}-{hi:.0f}: " + "  ".join(
+            f"{m:+.4f} ± {e:.4f}" for m, e in zip(out["closure_regions"][k],
+                                                 out["closure_regions_spread"][k]))
+              + f"   half-rise (unfolded - truth) {out['closure_hr'][0][k]:+.3f} ± "
+              f"{out['closure_hr'][1][k]:.3f} GeV")
+    print(f"        chi2/ndf of the mean over splits (per bin, sigma = spread/sqrt(n)): "
+          f"{out['closure_chi2'][0]:.1f}/{out['closure_chi2'][1]}")
 
     # ---- stress test: truth reweighted to the Pythia 8 shape ----
     syst: dict = {}
@@ -434,9 +474,7 @@ def run_variant(S, D, v, args, rng, py8, mean_pt_gen, summary, label):
         r = np.ones((N_GEN_JET, NR))
         for i, k in enumerate(GEN_REPORT):
             a, b = eec_mod.shape(p8v[i], BINS), eec_mod.shape(T[k] / DLOG, BINS)
-            with np.errstate(divide="ignore", invalid="ignore"):
-                rr = np.where((a > 0) & (b > 0), a / b, 1.0)
-            r[k] = rr
+            r[k] = smooth_ratio(a, b, py8[1][i] / np.where(p8v[i] > 0, p8v[i], np.inf))
         r[0], r[-1] = r[1], r[-2]          # under/overflow gen bins: nearest reported bin
         T_rw = (T * r).ravel()
         d_rw = (nom.A @ T_rw) / np.where(nom.fake < 1, 1 - nom.fake, 1)
@@ -488,11 +526,40 @@ def run_variant(S, D, v, args, rng, py8, mean_pt_gen, summary, label):
     syst["iterations (n -> n+1)"] = gen_shapes(t_all[n_it]) - shp
 
     out["syst"] = syst
+    # unfolded data relative to the generators, per region (total uncertainty = mean over bins)
+    comp = {"Pythia 6 Z2 (SIM gen)": sim_gen}
+    if py8 is not None:
+        comp["Pythia 8.318"] = np.array([eec_mod.shape(x, BINS) for x in py8[0]])
+    out["vs_mc"] = {}
+    for name, ref in comp.items():
+        with np.errstate(divide="ignore", invalid="ignore"):
+            out["vs_mc"][name] = (region_means(shp / ref), region_means(
+                np.sqrt(stat**2 + sum(x**2 for x in syst.values())) / ref))
+        print(f"  [{v}] unfolded data / {name}, per region (± total): " + " | ".join(
+            "  ".join(f"{a:.3f}±{b:.3f}" for a, b in zip(*[x[k] for x in out["vs_mc"][name]]))
+            for k in range(4)))
     # half-rise systematics: from shifted shapes
     out["hr_syst"] = {k: half_rises(np.clip(shp + s, 1e-12, None), mean_pt_gen) - hr
                       for k, s in syst.items() if k != "response statistics"}
-    out["hr_syst"]["response statistics"] = np.std(
-        [half_rises(x, mean_pt_gen) for x in rb], axis=0, ddof=1)
+    hr_rb = np.array([half_rises(x, mean_pt_gen) for x in rb])
+    out["hr_syst"]["response statistics"] = np.std(hr_rb, axis=0, ddof=1)
+    # does the half-rise R_L*<pT> stay fixed? ratio of the 700-1000 to the 375-450 bin, with
+    # every systematic shift applied to all bins at once (fully correlated across pT)
+    ratio = hr[3] / hr[0]
+    r_stat = float(np.std(hr_boot[:, 3] / hr_boot[:, 0], ddof=1))
+    r_syst = {}
+    for k, sft in syst.items():
+        if k == "response statistics":
+            r_syst[k] = float(np.std(hr_rb[:, 3] / hr_rb[:, 0], ddof=1))
+        else:
+            h2 = half_rises(np.clip(shp + sft, 1e-12, None), mean_pt_gen)
+            r_syst[k] = float(h2[3] / h2[0] - ratio)
+    out["hr_ratio"] = (float(ratio), r_stat, float(np.sqrt(sum(x**2 for x in r_syst.values()))),
+                       r_syst)
+    print(f"  [{v}] half-rise ratio (700-1000)/(375-450) = {ratio:.3f} ± {r_stat:.3f} (stat) ± "
+          f"{out['hr_ratio'][2]:.3f} (syst); fixed R_L would give "
+          f"{mean_pt_gen[3] / mean_pt_gen[0]:.2f}, Pythia 6 truth "
+          f"{out['hr_sim_gen'][3] / out['hr_sim_gen'][0]:.3f}")
     tot_syst = np.sqrt(sum(s**2 for s in syst.values()))
     out["tot_syst"] = tot_syst
     out["tot"] = np.sqrt(tot_syst**2 + stat**2)
@@ -509,7 +576,8 @@ def run_variant(S, D, v, args, rng, py8, mean_pt_gen, summary, label):
 def _json_variant(o):
     keep = {}
     for k in ("n_iter", "iter_rows", "hr", "hr_stat", "hr_bbb", "hr_sim_gen", "closure_regions",
-              "closure_chi2", "closure_hr", "stress_regions", "stress_hr", "hr_tot_syst"):
+              "closure_chi2", "closure_hr", "closure_regions_spread", "stress_regions",
+              "hr_ratio", "vs_mc", "data_over_simreco", "matched_by_gen_bin", "matched_small_rl", "fake_by_reco_bin", "stress_hr", "hr_tot_syst"):
         if k in o:
             keep[k] = o[k]
     keep["hr_syst"] = o["hr_syst"]
@@ -537,6 +605,7 @@ def main() -> int:
     ap.add_argument("--data-files", type=int, default=3)
     ap.add_argument("--n-boot", type=int, default=100, help="data bootstrap replicas")
     ap.add_argument("--n-boot-resp", type=int, default=50, help="response-group resamples")
+    ap.add_argument("--n-splits", type=int, default=30, help="random half splits for closure")
     ap.add_argument("--n-iter", type=int, default=0, help="fix iterations (0 = stopping rule)")
     ap.add_argument("--n-iter-max", type=int, default=20)
     ap.add_argument("--seed", type=int, default=2026)
@@ -674,8 +743,8 @@ def _plots(rc, ra, py8, mpt_gen, mpt_reco, summary):
                     color="C1", capsize=2, label="Pythia 8.318")
     hr_reco = half_rises(rc["reco_shape"], mpt_reco)
     a1.plot(x, hr_reco, "v--", color="0.5", label="data, detector level (reco pT)")
-    a1.set_xlabel(r"jet $p_T$ bin centre [GeV]")
-    a1.set_ylabel(r"half-rise $R_L \cdot \langle p_T \rangle$ [GeV]")
+    a1.set_xlabel(r"jet $p_T$ bin centre [GeV]", fontsize=15)
+    a1.set_ylabel(r"half-rise $R_L \cdot \langle p_T \rangle$ [GeV]", fontsize=15)
     a1.set_title("charged particles, pT > 1 GeV", fontsize=12)
     a1.legend(fontsize=9)
     for k in range(4):
@@ -684,8 +753,8 @@ def _plots(rc, ra, py8, mpt_gen, mpt_reco, summary):
     a2.set_yscale("log")
     a2.set_xlim(0.3, 300)
     a2.set_ylim(3e-3, 0.6)
-    a2.set_xlabel(r"$R_L \cdot \langle p_T^{gen} \rangle$ [GeV]")
-    a2.set_ylabel("unfolded charged EEC, unit area")
+    a2.set_xlabel(r"$R_L \cdot \langle p_T^{gen} \rangle$ [GeV]", fontsize=15)
+    a2.set_ylabel("unfolded charged EEC, unit area", fontsize=15)
     a2.legend(fontsize=9, loc="lower right")
     fig.tight_layout()
     plot_mod.save(fig, str(outdir / "eec_mod2011_unfolded_halfrise.png"))
@@ -696,23 +765,24 @@ def _plots(rc, ra, py8, mpt_gen, mpt_reco, summary):
     for k in range(4):
         ax = axs[0, k]
         ax.fill_between(c, 1 - rc["closure_err"][k], 1 + rc["closure_err"][k], color="0.8",
-                        lw=0, label="half-sample stat.")
-        for n, col in ((1, "C3"), (rc["n_iter"], "k")):
-            ax.plot(c, rc["closure_by_n"][n][k], color=col, lw=1.3, label=f"n = {n}")
+                        lw=0, label="spread of one half split")
+        ax.plot(c, rc["closure_by_n"][rc["n_iter"]][k], color="C0", lw=1,
+                label=f"even/odd split, n = {rc['n_iter']}")
+        ax.plot(c, rc["closure_mean"][k], color="k", lw=1.6, label="mean of 30 splits")
         ax.set_ylim(0.9, 1.1)
         ax.axhline(1, color="grey", ls=":")
         ax.set_title(labs[k], fontsize=12)
         if "stress_by_n" in rc:
             ax2 = axs[1, k]
-            for n, col in ((1, "C3"), (2, "C0"), (rc["n_iter"], "k"), (8, "C4")):
+            for n, col in sorted({1: "C3", 2: "C0", 4: "C4", 8: "0.5", rc["n_iter"]: "k"}.items()):
                 if n in rc["stress_by_n"]:
                     ax2.plot(c, rc["stress_by_n"][n][k], color=col, lw=1.3, label=f"n = {n}")
             ax2.axhline(1, color="grey", ls=":")
             ax2.set_ylim(0.9, 1.1)
             ax2.set_xlabel(r"$R_L$")
             ax2.set_xscale("log")
-    axs[0, 0].set_ylabel("closure:\nunfolded / truth")
-    axs[1, 0].set_ylabel("stress test:\nunfolded / true (P8 shape)")
+    axs[0, 0].set_ylabel("closure:\nunfolded / truth", fontsize=14)
+    axs[1, 0].set_ylabel("stress test: unfolded /\ntrue (P8 shape)", fontsize=14)
     axs[0, 0].legend(fontsize=9)
     axs[1, 0].legend(fontsize=9)
     fig.tight_layout()
@@ -726,16 +796,17 @@ def _plots(rc, ra, py8, mpt_gen, mpt_reco, summary):
         s = rc["shape"][k]
         ax.plot(c, rc["stat"][k] / s, color="k", lw=2, label="data statistics")
         for i, (n, v) in enumerate(rc["syst"].items()):
-            ax.plot(c, np.abs(v[k]) / s, lw=1.3, color=f"C{i}", label=n)
+            ax.plot(c, np.abs(v[k]) / s, lw=1.2, color=plt.cm.tab10(i), label=n)
         ax.plot(c, rc["tot"][k] / s, color="k", ls="--", lw=1.5, label="total")
         ax.set_xscale("log")
         ax.set_yscale("log")
         ax.set_ylim(1e-4, 0.3)
         ax.set_xlabel(r"$R_L$")
         ax.set_title(labs[k], fontsize=12)
-    axs[0].set_ylabel("relative uncertainty")
-    axs[-1].legend(fontsize=8, loc="upper right")
-    fig.tight_layout()
+    axs[0].set_ylabel("relative uncertainty", fontsize=14)
+    h, lb = axs[0].get_legend_handles_labels()
+    fig.legend(h, lb, loc="lower center", ncol=5, fontsize=10, frameon=False)
+    fig.tight_layout(rect=(0, 0.14, 1, 1))
     plot_mod.save(fig, str(outdir / "eec_mod2011_unfolding_uncertainties.png"))
     plt.close(fig)
 

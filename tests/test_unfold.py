@@ -80,3 +80,19 @@ def test_iteration_pvalue():
     p, chi2 = unfold.iteration_pvalue([3.0, 1.0], [1.0, 1.0], [1.0, 1.0])
     assert chi2 == pytest.approx(4.0)
     assert p == pytest.approx(np.exp(-2.0))   # chi2 sf with ndf 2 is exp(-chi2/2)
+
+
+def test_smooth_ratio_exact_without_noise_and_unbiased_with_noise():
+    import unfold_mod as U
+
+    x = np.log(U.CENTRES)
+    true = np.exp(0.1 * x + 0.01 * x**2)              # a smooth "model change"
+    den, err = np.ones_like(x), np.full(len(x), 0.05)
+    assert np.allclose(U.smooth_ratio(true, den, err), true, rtol=1e-12)
+    rng = np.random.default_rng(0)
+    fits = np.array([U.smooth_ratio(true * (1 + 0.05 * rng.standard_normal(len(x))), den, err)
+                     for _ in range(200)])
+    rel = fits / true - 1
+    assert np.max(np.abs(rel.mean(axis=0))) < 0.01      # no bias (noise 5% per bin)
+    # scatter of the fit is smaller than the 5% per-bin noise, except near the two ends
+    assert np.max(rel.std(axis=0)[5:-5]) < 0.025
